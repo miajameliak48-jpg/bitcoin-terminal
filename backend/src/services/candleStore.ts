@@ -4,7 +4,7 @@ const BUFFER_SIZE = 1000;
 
 const store = new Map<Timeframe, Candle[]>();
 
-const TIMEFRAMES: Timeframe[] = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d'];
+const TIMEFRAMES: Timeframe[] = ['1s', '1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M'];
 for (const tf of TIMEFRAMES) {
   store.set(tf, []);
 }

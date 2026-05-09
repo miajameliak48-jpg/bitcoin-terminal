@@ -7,7 +7,7 @@ export const wsEvents = new EventEmitter();
 
 const BINANCE_WS_BASE = 'wss://stream.binance.com:9443/stream';
 const SYMBOL = 'btcusdt';
-const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h'];
+const TIMEFRAMES: Timeframe[] = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d'];
 
 let ws: WebSocket | null = null;
 let reconnectDelay = 1000;

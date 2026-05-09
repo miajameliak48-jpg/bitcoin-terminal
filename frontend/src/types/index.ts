@@ -1,4 +1,4 @@
-export type Timeframe = '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
+export type Timeframe = '1s' | '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '2h' | '4h' | '6h' | '8h' | '12h' | '1d' | '3d' | '1w' | '1M';
 export type SignalType = 'BUY' | 'SELL' | 'HOLD';
 export type SignalStrength = 'LOW' | 'MEDIUM' | 'HIGH';
 export type StrategyType = 'EMA25_CROSSOVER' | 'EMA25_BOUNCE' | 'EMA25_RSI' | 'EMA25_BOUNCE_1M';
