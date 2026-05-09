@@ -18,7 +18,7 @@ export default function TradingChart() {
   const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  const { candles, ema25 } = useChartStore();
+  const { candles, ema25, isLoading } = useChartStore();
   const { signals } = useSignalStore();
 
   const initChart = useCallback(() => {
@@ -160,5 +160,17 @@ export default function TradingChart() {
     }
   }, [candles]);
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#0d1117] z-10">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-muted">Загрузка свечей...</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -44,6 +44,7 @@ export interface Strategy {
   type: StrategyType;
   timeframe: Timeframe;
   riskPercent: number;
+  leverage: number;
   enabled: boolean;
   params: Record<string, any>;
   createdAt?: string;
@@ -89,6 +90,7 @@ export interface Trade {
   pnlPercent?: number | null;
   riskAmount?: number | null;
   pnlUsd?: number | null;
+  leverage?: number;
   confidence: number;
   riskReward: number;
   openedAt?: string;

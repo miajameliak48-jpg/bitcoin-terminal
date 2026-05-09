@@ -21,6 +21,7 @@ export function rowToTrade(r: any): Trade {
     pnlPercent: r.pnl_percent ? parseFloat(r.pnl_percent) : null,
     riskAmount: r.risk_amount ? parseFloat(r.risk_amount) : null,
     pnlUsd: r.pnl_usd ? parseFloat(r.pnl_usd) : null,
+    leverage: r.leverage || 1,
     confidence: parseFloat(r.confidence),
     riskReward: parseFloat(r.risk_reward),
     openedAt: r.opened_at,
@@ -97,8 +98,9 @@ export function createTradesRouter(io: SocketIOServer) {
       const result = pnlPercent >= 0 ? 'WIN' : 'LOSS';
 
       const riskAmount = trade.risk_amount ? parseFloat(trade.risk_amount) : 0;
+      const leverage = trade.leverage || 1;
       const stopDist = Math.abs(entryPrice - parseFloat(trade.stop_loss));
-      const positionSizeBtc = stopDist > 0 ? riskAmount / stopDist : 0;
+      const positionSizeBtc = stopDist > 0 ? (riskAmount / stopDist) * leverage : 0;
       const pnlUsd = positionSizeBtc * (price - entryPrice) * (isBuy ? 1 : -1);
 
       const { rows: [updated] } = await pool.query(

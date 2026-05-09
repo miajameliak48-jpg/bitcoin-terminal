@@ -15,7 +15,7 @@ export default function EMAOscillator() {
   const chartRef = useRef<IChartApi | null>(null);
   const baselineSeriesRef = useRef<ISeriesApi<'Baseline'> | null>(null);
 
-  const { candles, ema25 } = useChartStore();
+  const { candles, ema25, isLoading } = useChartStore();
 
   const initChart = useCallback(() => {
     if (!containerRef.current) return;
@@ -118,5 +118,17 @@ export default function EMAOscillator() {
     });
   }, [candles]);
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#0d1117] z-10">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-muted">Загрузка...</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

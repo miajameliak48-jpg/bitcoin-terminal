@@ -5,6 +5,7 @@ interface ChartState {
   timeframe: Timeframe;
   candles: Candle[];
   ema25: EMAPoint[];
+  isLoading: boolean;
   setTimeframe: (tf: Timeframe) => void;
   setCandles: (candles: Candle[], ema25: EMAPoint[]) => void;
   updateCandle: (candle: Candle, ema25Value: number | null) => void;
@@ -14,8 +15,9 @@ export const useChartStore = create<ChartState>((set) => ({
   timeframe: '15m',
   candles: [],
   ema25: [],
-  setTimeframe: (timeframe) => set({ timeframe, candles: [], ema25: [] }),
-  setCandles: (candles, ema25) => set({ candles, ema25 }),
+  isLoading: true,
+  setTimeframe: (timeframe) => set({ timeframe, candles: [], ema25: [], isLoading: true }),
+  setCandles: (candles, ema25) => set({ candles, ema25, isLoading: false }),
   updateCandle: (candle, ema25Value) =>
     set((state) => {
       const candles = [...state.candles];

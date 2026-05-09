@@ -170,7 +170,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
 
     const { rows } = await pool.query(
-      'SELECT id, name, type, timeframe, risk_percent, enabled, params FROM strategies WHERE id = $1',
+      'SELECT id, name, type, timeframe, risk_percent, leverage, enabled, params FROM strategies WHERE id = $1',
       [id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Strategy not found' });
@@ -181,6 +181,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       type: rows[0].type,
       timeframe: rows[0].timeframe,
       riskPercent: parseFloat(rows[0].risk_percent),
+      leverage: rows[0].leverage || 1,
       enabled: rows[0].enabled,
       params: rows[0].params,
     };
