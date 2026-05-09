@@ -143,9 +143,13 @@ function scheduleReconnect(): void {
   }, reconnectDelay);
 }
 
+// TFs that aren't in the WS stream but should be preloaded on startup
+const EXTRA_PRELOAD_TFS: Timeframe[] = ['8h', '3d', '1w', '1M'];
+
 export async function startBinanceWS(): Promise<void> {
   console.log('Loading historical candles...');
-  for (const tf of TIMEFRAMES) {
+  const allPreload = [...TIMEFRAMES, ...EXTRA_PRELOAD_TFS];
+  for (const tf of allPreload) {
     try {
       const candles = await fetchHistoricalCandles(tf, 1000);
       const { updateCandle } = await import('./candleStore');
