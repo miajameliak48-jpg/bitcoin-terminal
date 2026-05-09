@@ -176,6 +176,16 @@ export function OpenTradeModal({ defaultSide, onClose }: { defaultSide?: 'BUY' |
     }
   }
 
+  const entryNum = parseFloat(entry);
+  const slNum = parseFloat(sl);
+  const tpNum = parseFloat(tp);
+  const hasEntry = !isNaN(entryNum) && entryNum > 0;
+  const slPct = hasEntry && !isNaN(slNum) ? ((slNum - entryNum) / entryNum) * 100 : null;
+  const tpPct = hasEntry && !isNaN(tpNum) ? ((tpNum - entryNum) / entryNum) * 100 : null;
+  const rrValue = hasEntry && slPct !== null && tpPct !== null && Math.abs(entryNum - slNum) > 0
+    ? (Math.abs(tpNum - entryNum) / Math.abs(entryNum - slNum)).toFixed(2)
+    : null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
@@ -217,7 +227,12 @@ export function OpenTradeModal({ defaultSide, onClose }: { defaultSide?: 'BUY' |
             />
           </div>
           <div>
-            <label className="text-[10px] text-muted block mb-1">Стоп-лосс (USDT)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] text-muted">Стоп-лосс (USDT)</label>
+              {slPct !== null && (
+                <span className="text-[10px] text-sell tabular-nums">{slPct.toFixed(2)}%</span>
+              )}
+            </div>
             <input
               value={sl}
               onChange={e => setSl(e.target.value)}
@@ -226,7 +241,12 @@ export function OpenTradeModal({ defaultSide, onClose }: { defaultSide?: 'BUY' |
             />
           </div>
           <div>
-            <label className="text-[10px] text-muted block mb-1">Тейк-профит (USDT)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] text-muted">Тейк-профит (USDT)</label>
+              {tpPct !== null && (
+                <span className="text-[10px] text-buy tabular-nums">+{tpPct.toFixed(2)}%</span>
+              )}
+            </div>
             <input
               value={tp}
               onChange={e => setTp(e.target.value)}
@@ -236,19 +256,12 @@ export function OpenTradeModal({ defaultSide, onClose }: { defaultSide?: 'BUY' |
           </div>
         </div>
 
-        {entry && sl && tp && (() => {
-          const e = parseFloat(entry), s = parseFloat(sl), t = parseFloat(tp);
-          if (!isNaN(e) && !isNaN(s) && !isNaN(t) && Math.abs(e - s) > 0) {
-            const rr = (Math.abs(t - e) / Math.abs(e - s)).toFixed(2);
-            return (
-              <div className="mt-3 text-xs text-muted flex justify-between bg-bg rounded px-2.5 py-1.5">
-                <span>Risk/Reward</span>
-                <span className="text-text font-semibold">1:{rr}</span>
-              </div>
-            );
-          }
-          return null;
-        })()}
+        {rrValue !== null && (
+          <div className="mt-3 text-xs text-muted flex justify-between bg-bg rounded px-2.5 py-1.5">
+            <span>Risk/Reward</span>
+            <span className="text-text font-semibold">1:{rrValue}</span>
+          </div>
+        )}
 
         {error && <div className="mt-2 text-xs text-sell">{error}</div>}
 
