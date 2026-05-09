@@ -38,6 +38,16 @@ html, body, #root {
   transform-origin: center center;
 }
 
+/* ── Explosion: CS:GO-style full-screen white flash ─────────────────── */
+@keyframes tf-screen-flash {
+  0%   { opacity: 0; }
+  4%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+.tf-screen-flash {
+  animation: tf-screen-flash 1.4s cubic-bezier(0, 0, 0.3, 1) forwards;
+}
+
 /* ── Explosion: central bright core ─────────────────────────────────── */
 @keyframes tf-flash-core {
   0%   { transform: scale(0);   opacity: 1;   filter: blur(0px); }

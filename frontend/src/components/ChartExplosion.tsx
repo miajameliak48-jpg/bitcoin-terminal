@@ -26,6 +26,9 @@ export default function ChartExplosion({ onDone }: Props) {
   return (
     <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden flex items-center justify-center">
 
+      {/* Full-screen white flash — peaks instantly, fades out */}
+      <div className="absolute inset-0 bg-white tf-screen-flash" />
+
       {/* Bright inner core */}
       <div
         className="absolute rounded-full tf-flash-core"
