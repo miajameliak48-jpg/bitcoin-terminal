@@ -92,7 +92,9 @@ export const useStrategyStore = create<StrategyState>((set) => ({
 
 interface BalanceState {
   balance: number;
-  setBalance: (b: number) => void;
+  // syncToServer=true persists to localStorage and triggers server sync (via Header/api)
+  // syncToServer=false is used when receiving balance:update from socket (server is already updated)
+  setBalance: (b: number, syncToServer?: boolean) => void;
 }
 
 export const useBalanceStore = create<BalanceState>((set) => ({
@@ -100,9 +102,11 @@ export const useBalanceStore = create<BalanceState>((set) => ({
     const saved = localStorage.getItem('btc_balance');
     return saved ? parseFloat(saved) || 10000 : 10000;
   })(),
-  setBalance: (balance) => {
+  setBalance: (balance, syncToServer = true) => {
     localStorage.setItem('btc_balance', balance.toString());
     set({ balance });
+    // Actual server sync is done by the caller (Header) when syncToServer=true
+    void syncToServer;
   },
 }));
 

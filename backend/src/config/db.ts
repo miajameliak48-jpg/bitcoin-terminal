@@ -86,6 +86,20 @@ export async function initDB(): Promise<void> {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS account_settings (
+        id INT DEFAULT 1 PRIMARY KEY,
+        balance DECIMAL(20,8) DEFAULT 10000,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `INSERT INTO account_settings (id, balance) VALUES (1, 10000) ON CONFLICT (id) DO NOTHING`
+    );
+
+    await client.query(`ALTER TABLE trades ADD COLUMN IF NOT EXISTS risk_amount DECIMAL(20,8)`);
+    await client.query(`ALTER TABLE trades ADD COLUMN IF NOT EXISTS pnl_usd DECIMAL(20,8)`);
+
     await client.query(`CREATE INDEX IF NOT EXISTS idx_candles_tf_time ON candles(timeframe, open_time DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status, opened_at DESC)`);

@@ -22,7 +22,8 @@ function Summary({ trades }: { trades: Trade[] }) {
   const wins = trades.filter(t => t.result === 'WIN').length;
   const losses = trades.filter(t => t.result === 'LOSS').length;
   const winRate = trades.length > 0 ? (wins / trades.length) * 100 : 0;
-  const totalPnl = trades.reduce((sum, t) => sum + (t.pnlPercent ?? 0), 0);
+  const totalPnlUsd = trades.reduce((sum, t) => sum + (t.pnlUsd ?? 0), 0);
+  const hasUsd = trades.some(t => t.pnlUsd != null);
 
   return (
     <div className="px-3 py-2 border-b border-border bg-panel/50 grid grid-cols-3 gap-2 text-center shrink-0">
@@ -32,9 +33,13 @@ function Summary({ trades }: { trades: Trade[] }) {
       </div>
       <div>
         <div className="text-xs text-muted">P&L</div>
-        <div className={`text-sm font-bold tabular-nums ${totalPnl >= 0 ? 'text-buy' : 'text-sell'}`}>
-          {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)}%
-        </div>
+        {hasUsd ? (
+          <div className={`text-sm font-bold tabular-nums ${totalPnlUsd >= 0 ? 'text-buy' : 'text-sell'}`}>
+            {totalPnlUsd >= 0 ? '+' : ''}{totalPnlUsd.toFixed(2)}$
+          </div>
+        ) : (
+          <div className="text-sm font-bold text-muted">—</div>
+        )}
       </div>
       <div>
         <div className="text-xs text-muted">W / L</div>
@@ -52,6 +57,7 @@ function TradeRow({ trade }: { trade: Trade }) {
   const isBuy = trade.signalType === 'BUY';
   const isWin = trade.result === 'WIN';
   const pnl = trade.pnlPercent ?? 0;
+  const pnlUsd = trade.pnlUsd ?? null;
 
   return (
     <div className={`p-3 rounded-lg border ${isWin ? 'border-buy/20 bg-buy/5' : 'border-sell/20 bg-sell/5'}`}>
@@ -65,9 +71,16 @@ function TradeRow({ trade }: { trade: Trade }) {
           </span>
           <span className="text-xs text-muted">{trade.timeframe}</span>
         </div>
-        <span className={`text-sm font-bold tabular-nums ${pnl >= 0 ? 'text-buy' : 'text-sell'}`}>
-          {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}%
-        </span>
+        <div className="text-right">
+          <div className={`text-sm font-bold tabular-nums ${pnl >= 0 ? 'text-buy' : 'text-sell'}`}>
+            {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}%
+          </div>
+          {pnlUsd !== null && (
+            <div className={`text-[10px] tabular-nums ${pnlUsd >= 0 ? 'text-buy/70' : 'text-sell/70'}`}>
+              {pnlUsd >= 0 ? '+' : ''}{pnlUsd.toFixed(2)}$
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
@@ -77,7 +90,10 @@ function TradeRow({ trade }: { trade: Trade }) {
         <span className="text-muted">Закрыта: <span className="text-text">{fmtDate(trade.closedAt)}</span></span>
       </div>
 
-      <div className="mt-1.5 text-xs text-muted truncate">{trade.strategyName}</div>
+      {trade.riskAmount && (
+        <div className="mt-1 text-xs text-muted">Риск: <span className="text-sell tabular-nums">${fmt(trade.riskAmount)}</span></div>
+      )}
+      <div className="mt-1 text-xs text-muted truncate">{trade.strategyName}</div>
     </div>
   );
 }

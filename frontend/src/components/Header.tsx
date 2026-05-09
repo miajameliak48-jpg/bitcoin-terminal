@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTickerStore, useBalanceStore } from '../store';
+import { syncBalance } from '../services/api';
 
 function fmt(n: number, d = 2) {
   return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -19,7 +20,10 @@ function BalanceWidget() {
 
   function commit() {
     const val = parseFloat(draft.replace(/,/g, ''));
-    if (!isNaN(val) && val > 0) setBalance(val);
+    if (!isNaN(val) && val > 0) {
+      setBalance(val);
+      syncBalance(val).catch(console.error);
+    }
     setEditing(false);
   }
 

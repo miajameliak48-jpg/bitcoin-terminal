@@ -7,12 +7,13 @@ import pool from './config/db';
 import { startBinanceWS, wsEvents } from './services/binanceWs';
 import { getCandles } from './services/candleStore';
 import { runStrategy } from './services/strategyRunner';
+import { getBalance, setBalance, applyPnl } from './services/balanceService';
 import { calculateEMA } from './indicators/ema';
 import candlesRouter from './routes/candles';
 import strategiesRouter from './routes/strategies';
 import signalsRouter from './routes/signals';
 import statsRouter from './routes/stats';
-import tradesRouter, { rowToTrade } from './routes/trades';
+import { createTradesRouter, rowToTrade } from './routes/trades';
 import { Timeframe, Signal, Strategy, Trade } from './types';
 
 const app = express();
@@ -31,10 +32,32 @@ app.use('/api/candles', candlesRouter);
 app.use('/api/strategies', strategiesRouter);
 app.use('/api/signals', signalsRouter);
 app.use('/api/stats', statsRouter);
-app.use('/api/trades', tradesRouter);
+app.use('/api/trades', createTradesRouter(io));
 
 app.get('/api/ticker', (_req, res) => {
   res.json(currentTicker || {});
+});
+
+app.get('/api/balance', async (_req, res) => {
+  try {
+    res.json({ balance: await getBalance() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/balance', async (req, res) => {
+  try {
+    const { balance } = req.body as { balance: number };
+    if (!balance || isNaN(Number(balance)) || Number(balance) <= 0) {
+      return res.status(400).json({ error: 'balance must be a positive number' });
+    }
+    const newBalance = await setBalance(Number(balance));
+    io.emit('balance:update', newBalance);
+    res.json({ balance: newBalance });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/health', (_req, res) => {
@@ -58,17 +81,20 @@ async function getActiveStrategies(): Promise<Strategy[]> {
   }));
 }
 
-async function createTrade(signal: Signal): Promise<Trade> {
+async function createTrade(signal: Signal, riskPercent: number): Promise<Trade> {
+  const balance = await getBalance();
+  const riskAmount = parseFloat((balance * riskPercent / 100).toFixed(8));
+
   const { rows } = await pool.query(
     `INSERT INTO trades
       (signal_id, strategy_id, strategy_name, timeframe, signal_type,
-       entry_price, stop_loss, take_profit, confidence, risk_reward)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       entry_price, stop_loss, take_profit, confidence, risk_reward, risk_amount)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       signal.id ?? null, signal.strategyId, signal.strategyName, signal.timeframe,
       signal.signalType, signal.price, signal.stopLoss, signal.takeProfit,
-      signal.confidence, signal.riskReward,
+      signal.confidence, signal.riskReward, riskAmount,
     ]
   );
   return rowToTrade(rows[0]);
@@ -90,12 +116,23 @@ async function checkAndCloseTrades(currentPrice: number): Promise<void> {
       ? ((currentPrice - entry) / entry) * 100
       : ((entry - currentPrice) / entry) * 100;
 
+    const riskAmount = r.risk_amount ? parseFloat(r.risk_amount) : 0;
+    const stopDist = Math.abs(entry - sl);
+    const positionSizeBtc = stopDist > 0 ? riskAmount / stopDist : 0;
+    const pnlUsd = positionSizeBtc * Math.abs(currentPrice - entry) * (hitTP ? 1 : -1);
+
     const { rows: [updated] } = await pool.query(
       `UPDATE trades
-       SET exit_price = $1, status = 'CLOSED', result = $2, pnl_percent = $3, closed_at = NOW()
-       WHERE id = $4 RETURNING *`,
-      [currentPrice, result, pnlPercent.toFixed(4), r.id]
+       SET exit_price = $1, status = 'CLOSED', result = $2, pnl_percent = $3, pnl_usd = $4, closed_at = NOW()
+       WHERE id = $5 RETURNING *`,
+      [currentPrice, result, pnlPercent.toFixed(4), pnlUsd.toFixed(8), r.id]
     );
+
+    if (riskAmount > 0) {
+      const newBalance = await applyPnl(pnlUsd);
+      io.emit('balance:update', newBalance);
+    }
+
     io.emit('trade:update', rowToTrade(updated));
   }
 }
@@ -117,7 +154,7 @@ async function saveSignal(signal: Signal): Promise<Signal> {
   return { ...signal, id: rows[0].id, createdAt: rows[0].created_at };
 }
 
-wsEvents.on('candle', ({ timeframe, candle, wasClosed }) => {
+wsEvents.on('candle', ({ timeframe, candle }) => {
   const closes = getCandles(timeframe as Timeframe, 1000).map(c => c.close);
   const ema25arr = calculateEMA(closes, 25);
   const currentEMA = ema25arr[ema25arr.length - 1];
@@ -143,8 +180,8 @@ wsEvents.on('candle:closed', async ({ timeframe, candle }) => {
       if (signal && signal.confidence >= 50) {
         const saved = await saveSignal(signal);
         io.emit('signal:new', saved);
-        console.log(`[${timeframe}] ${signal.signalType} signal @ ${signal.price.toFixed(2)} (${signal.confidence}% confidence)`);
-        const trade = await createTrade(saved);
+        console.log(`[${timeframe}] ${signal.signalType} @ ${signal.price.toFixed(2)} (${signal.confidence}% conf, ${strategy.riskPercent}% risk)`);
+        const trade = await createTrade(saved, strategy.riskPercent);
         io.emit('trade:new', trade);
       }
     }
@@ -170,17 +207,17 @@ io.on('connection', async (socket) => {
   if (currentTicker) socket.emit('ticker:update', currentTicker);
 
   try {
-    const { rows: openRows } = await pool.query(
-      `SELECT * FROM trades WHERE status = 'OPEN' ORDER BY opened_at DESC`
-    );
-    socket.emit('trades:open', openRows.map(rowToTrade));
+    const [openResult, closedResult, balance] = await Promise.all([
+      pool.query(`SELECT * FROM trades WHERE status = 'OPEN' ORDER BY opened_at DESC`),
+      pool.query(`SELECT * FROM trades WHERE status = 'CLOSED' ORDER BY closed_at DESC LIMIT 100`),
+      getBalance(),
+    ]);
 
-    const { rows: closedRows } = await pool.query(
-      `SELECT * FROM trades WHERE status = 'CLOSED' ORDER BY closed_at DESC LIMIT 100`
-    );
-    socket.emit('trades:closed', closedRows.map(rowToTrade));
+    socket.emit('trades:open', openResult.rows.map(rowToTrade));
+    socket.emit('trades:closed', closedResult.rows.map(rowToTrade));
+    socket.emit('balance:update', balance);
   } catch (err: any) {
-    console.error('Error sending trades on connect:', err.message);
+    console.error('Error sending initial data on connect:', err.message);
   }
 
   socket.on('subscribe:timeframe', (timeframe: Timeframe) => {

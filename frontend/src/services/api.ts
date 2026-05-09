@@ -63,3 +63,13 @@ export async function openTrade(params: {
   const { data } = await api.post('/trades', params);
   return data;
 }
+
+export async function fetchBalance(): Promise<number> {
+  const { data } = await api.get('/balance');
+  return data.balance;
+}
+
+export async function syncBalance(balance: number): Promise<number> {
+  const { data } = await api.put('/balance', { balance });
+  return data.balance;
+}

@@ -100,6 +100,8 @@ export interface Trade {
   status: TradeStatus;
   result?: TradeResult | null;
   pnlPercent?: number | null;
+  riskAmount?: number | null;
+  pnlUsd?: number | null;
   confidence: number;
   riskReward: number;
   openedAt?: string;
