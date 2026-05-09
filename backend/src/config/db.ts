@@ -1,0 +1,87 @@
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  host: '127.0.0.1',
+  port: 5432,
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'ITY3OvroBGJOc6I46AylUpct',
+  database: process.env.DB_NAME || 'bitcoin_terminal',
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+export async function initDB(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS strategies (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        timeframe VARCHAR(10) NOT NULL,
+        risk_percent DECIMAL(5,2) DEFAULT 1.0,
+        enabled BOOLEAN DEFAULT TRUE,
+        params JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS candles (
+        id BIGSERIAL PRIMARY KEY,
+        timeframe VARCHAR(10) NOT NULL,
+        open_time BIGINT NOT NULL,
+        open DECIMAL(20,8) NOT NULL,
+        high DECIMAL(20,8) NOT NULL,
+        low DECIMAL(20,8) NOT NULL,
+        close DECIMAL(20,8) NOT NULL,
+        volume DECIMAL(30,8) NOT NULL,
+        close_time BIGINT NOT NULL,
+        is_closed BOOLEAN DEFAULT FALSE,
+        UNIQUE(timeframe, open_time)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS signals (
+        id BIGSERIAL PRIMARY KEY,
+        strategy_id INTEGER REFERENCES strategies(id),
+        strategy_name VARCHAR(100),
+        strategy_type VARCHAR(50),
+        timeframe VARCHAR(10) NOT NULL,
+        signal_type VARCHAR(10) NOT NULL,
+        price DECIMAL(20,8) NOT NULL,
+        ema25 DECIMAL(20,8),
+        rsi DECIMAL(10,4),
+        confidence DECIMAL(5,2),
+        strength VARCHAR(10),
+        stop_loss DECIMAL(20,8),
+        take_profit DECIMAL(20,8),
+        risk_reward DECIMAL(10,4),
+        atr DECIMAL(20,8),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_candles_tf_time ON candles(timeframe, open_time DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC)`);
+
+    // Seed default strategies
+    const { rows } = await client.query('SELECT COUNT(*) FROM strategies');
+    if (parseInt(rows[0].count) === 0) {
+      await client.query(`
+        INSERT INTO strategies (name, type, timeframe, risk_percent, enabled, params) VALUES
+        ('EMA25 Crossover 15m', 'EMA25_CROSSOVER', '15m', 1.0, true, '{"rrRatio":2,"atrMultiplierSL":1.5,"volumeFilter":true}'),
+        ('EMA25 Bounce 5m', 'EMA25_BOUNCE', '5m', 1.0, true, '{"rrRatio":2,"atrMultiplierSL":0.5}'),
+        ('EMA25 + RSI 1h', 'EMA25_RSI', '1h', 1.5, true, '{"rrRatio":2.5,"rsiOverbought":70,"rsiOversold":30}')
+      `);
+    }
+
+    console.log('Database initialized');
+  } finally {
+    client.release();
+  }
+}
+
+export default pool;
