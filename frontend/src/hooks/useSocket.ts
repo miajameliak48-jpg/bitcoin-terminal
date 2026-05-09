@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useChartStore, useSignalStore, useTickerStore, useOrderBookStore } from '../store';
+import { useChartStore, useSignalStore, useTickerStore, useOrderBookStore, useTradeStore } from '../store';
 import { Timeframe } from '../types';
 
 let socket: Socket | null = null;
@@ -17,6 +17,7 @@ export function useSocket() {
   const { addSignal } = useSignalStore();
   const { setTicker } = useTickerStore();
   const { setOrderBook } = useOrderBookStore();
+  const { setOpenTrades, setClosedTrades, addTrade, moveToClosed } = useTradeStore();
   const prevTimeframe = useRef<Timeframe | null>(null);
 
   useEffect(() => {
@@ -25,6 +26,10 @@ export function useSocket() {
     s.on('ticker:update', setTicker);
     s.on('signal:new', addSignal);
     s.on('orderbook:update', setOrderBook);
+    s.on('trades:open', setOpenTrades);
+    s.on('trades:closed', setClosedTrades);
+    s.on('trade:new', addTrade);
+    s.on('trade:update', moveToClosed);
 
     s.on('candle:update', ({ timeframe: tf, candle, ema25 }) => {
       if (tf === useChartStore.getState().timeframe) {
@@ -42,6 +47,10 @@ export function useSocket() {
       s.off('ticker:update', setTicker);
       s.off('signal:new', addSignal);
       s.off('orderbook:update', setOrderBook);
+      s.off('trades:open', setOpenTrades);
+      s.off('trades:closed', setClosedTrades);
+      s.off('trade:new', addTrade);
+      s.off('trade:update', moveToClosed);
       s.off('candle:update');
       s.off('candles:history');
     };

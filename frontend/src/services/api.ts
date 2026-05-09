@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Candle, EMAPoint, Signal, Strategy, Ticker } from '../types';
+import { Candle, EMAPoint, Signal, Strategy, Ticker, Trade } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -41,5 +41,15 @@ export async function calculateRisk(params: {
   rrRatio: number;
 }) {
   const { data } = await api.post('/signals/risk', params);
+  return data;
+}
+
+export async function fetchTrades(status: 'open' | 'closed', limit = 100): Promise<Trade[]> {
+  const { data } = await api.get('/trades', { params: { status, limit } });
+  return data;
+}
+
+export async function closeTrade(id: number, exitPrice: number): Promise<Trade> {
+  const { data } = await api.put(`/trades/${id}/close`, { exitPrice });
   return data;
 }

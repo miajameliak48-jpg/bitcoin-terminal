@@ -1,0 +1,131 @@
+import { useTradeStore, useTickerStore } from '../store';
+import { closeTrade } from '../services/api';
+import { Trade } from '../types';
+
+function fmt(n: number) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function timeAgo(dateStr?: string): string {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'только что';
+  if (mins < 60) return `${mins}м назад`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}ч назад`;
+  return `${Math.floor(hrs / 24)}д назад`;
+}
+
+function calcUnrealizedPnl(trade: Trade, currentPrice: number): number {
+  const isBuy = trade.signalType === 'BUY';
+  return isBuy
+    ? ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100
+    : ((trade.entryPrice - currentPrice) / trade.entryPrice) * 100;
+}
+
+function PriceProgress({ trade, currentPrice }: { trade: Trade; currentPrice: number }) {
+  const isBuy = trade.signalType === 'BUY';
+  const range = Math.abs(trade.takeProfit - trade.stopLoss);
+  if (range === 0) return null;
+
+  const progress = isBuy
+    ? ((currentPrice - trade.stopLoss) / range) * 100
+    : ((trade.stopLoss - currentPrice) / range) * 100;
+  const clamped = Math.max(0, Math.min(100, progress));
+  const color = clamped >= 50 ? '#3fb950' : clamped >= 25 ? '#ff9500' : '#f85149';
+
+  return (
+    <div className="mt-1.5">
+      <div className="flex justify-between text-xs text-muted mb-0.5">
+        <span className="text-sell">SL {fmt(trade.stopLoss)}</span>
+        <span className="text-buy">TP {fmt(trade.takeProfit)}</span>
+      </div>
+      <div className="h-1 bg-border rounded-full overflow-hidden">
+        <div style={{ width: `${clamped}%`, backgroundColor: color }} className="h-full rounded-full transition-all duration-500" />
+      </div>
+    </div>
+  );
+}
+
+function TradeCard({ trade }: { trade: Trade }) {
+  const ticker = useTickerStore(s => s.ticker);
+  const { moveToClosed } = useTradeStore();
+  const currentPrice = ticker?.price ?? trade.entryPrice;
+  const isBuy = trade.signalType === 'BUY';
+  const pnl = calcUnrealizedPnl(trade, currentPrice);
+  const isProfit = pnl >= 0;
+
+  async function handleClose() {
+    if (!trade.id) return;
+    try {
+      const closed = await closeTrade(trade.id, currentPrice);
+      moveToClosed(closed);
+    } catch (e) {
+      console.error('Close trade error:', e);
+    }
+  }
+
+  return (
+    <div className={`p-3 rounded-lg border ${isBuy ? 'border-buy/25 bg-buy/5' : 'border-sell/25 bg-sell/5'}`}>
+      <div className="flex items-start justify-between mb-1.5">
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${isBuy ? 'bg-buy/20 text-buy' : 'bg-sell/20 text-sell'}`}>
+            {isBuy ? '▲ BUY' : '▼ SELL'}
+          </span>
+          <span className="text-xs text-muted">{trade.timeframe}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`text-sm font-bold tabular-nums ${isProfit ? 'text-buy' : 'text-sell'}`}>
+            {isProfit ? '+' : ''}{pnl.toFixed(2)}%
+          </span>
+          <button
+            onClick={handleClose}
+            className="text-xs text-muted hover:text-sell transition-colors px-1.5 py-0.5 rounded hover:bg-sell/10"
+            title="Закрыть сделку"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+        <span className="text-muted">Вход: <span className="text-text tabular-nums">${fmt(trade.entryPrice)}</span></span>
+        <span className="text-muted">Текущая: <span className="text-text tabular-nums">${fmt(currentPrice)}</span></span>
+        <span className="text-muted">RR: <span className="text-text">1:{trade.riskReward}</span></span>
+        <span className="text-muted">Уверен.: <span className="text-text">{trade.confidence}%</span></span>
+      </div>
+
+      <PriceProgress trade={trade} currentPrice={currentPrice} />
+
+      <div className="mt-1.5 flex items-center justify-between">
+        <span className="text-xs text-muted truncate">{trade.strategyName}</span>
+        <span className="text-xs text-muted shrink-0 ml-2">{timeAgo(trade.openedAt)}</span>
+      </div>
+    </div>
+  );
+}
+
+export default function OpenTradesPanel() {
+  const { openTrades } = useTradeStore();
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-3 py-2 border-b border-border flex items-center justify-between shrink-0">
+        <span className="text-sm font-semibold text-text">Открытые сделки</span>
+        <span className="text-xs text-muted">{openTrades.length} активных</span>
+      </div>
+      <div className="flex-1 overflow-y-auto space-y-2 p-2">
+        {openTrades.length === 0 ? (
+          <div className="text-center text-muted text-xs pt-8">
+            <div className="text-2xl mb-2">📊</div>
+            <div>Нет открытых сделок</div>
+            <div className="mt-1 opacity-60">Сделки открываются автоматически при получении сигнала</div>
+          </div>
+        ) : (
+          openTrades.map((t, i) => <TradeCard key={t.id ?? i} trade={t} />)
+        )}
+      </div>
+    </div>
+  );
+}

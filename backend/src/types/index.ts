@@ -82,3 +82,26 @@ export interface IndicatorValues {
   atr14: number[];
   volumeSma20: number[];
 }
+
+export type TradeStatus = 'OPEN' | 'CLOSED';
+export type TradeResult = 'WIN' | 'LOSS';
+
+export interface Trade {
+  id?: number;
+  signalId?: number | null;
+  strategyId: number;
+  strategyName: string;
+  timeframe: Timeframe;
+  signalType: SignalType;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  exitPrice?: number | null;
+  status: TradeStatus;
+  result?: TradeResult | null;
+  pnlPercent?: number | null;
+  confidence: number;
+  riskReward: number;
+  openedAt?: string;
+  closedAt?: string | null;
+}

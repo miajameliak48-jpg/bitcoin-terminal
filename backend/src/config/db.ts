@@ -64,8 +64,31 @@ export async function initDB(): Promise<void> {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trades (
+        id BIGSERIAL PRIMARY KEY,
+        signal_id BIGINT REFERENCES signals(id),
+        strategy_id INTEGER REFERENCES strategies(id),
+        strategy_name VARCHAR(100),
+        timeframe VARCHAR(10) NOT NULL,
+        signal_type VARCHAR(10) NOT NULL,
+        entry_price DECIMAL(20,8) NOT NULL,
+        stop_loss DECIMAL(20,8) NOT NULL,
+        take_profit DECIMAL(20,8) NOT NULL,
+        exit_price DECIMAL(20,8),
+        status VARCHAR(20) DEFAULT 'OPEN',
+        result VARCHAR(10),
+        pnl_percent DECIMAL(10,4),
+        confidence DECIMAL(5,2),
+        risk_reward DECIMAL(10,4),
+        opened_at TIMESTAMPTZ DEFAULT NOW(),
+        closed_at TIMESTAMPTZ
+      )
+    `);
+
     await client.query(`CREATE INDEX IF NOT EXISTS idx_candles_tf_time ON candles(timeframe, open_time DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status, opened_at DESC)`);
 
     // Seed default strategies
     const { rows } = await client.query('SELECT COUNT(*) FROM strategies');

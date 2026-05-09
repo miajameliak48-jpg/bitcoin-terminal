@@ -1,26 +1,39 @@
 import { useEffect, useState } from 'react';
 import Header from './components/Header';
 import TradingChart from './components/TradingChart';
+import EMAOscillator from './components/EMAOscillator';
 import SignalPanel from './components/SignalPanel';
 import OrderBook from './components/OrderBook';
 import StrategyPanel from './components/StrategyPanel';
 import RiskCalculator from './components/RiskCalculator';
+import OpenTradesPanel from './components/OpenTradesPanel';
+import ClosedTradesPanel from './components/ClosedTradesPanel';
 import StatsPage from './pages/StatsPage';
-import { useChartStore } from './store';
+import { useChartStore, useTradeStore } from './store';
 import { useSocket } from './hooks/useSocket';
 import { fetchSignals } from './services/api';
 import { useSignalStore } from './store';
 import { Timeframe } from './types';
 
 const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h'];
-type SideTab = 'signals' | 'strategies' | 'risk';
+type SideTab = 'signals' | 'strategies' | 'risk' | 'open' | 'closed';
 type Page = 'terminal' | 'stats';
+
+const SIDE_TABS: { key: SideTab; label: string }[] = [
+  { key: 'signals', label: 'Сигналы' },
+  { key: 'open', label: 'Открытые' },
+  { key: 'closed', label: 'Закрытые' },
+  { key: 'strategies', label: 'Стратег.' },
+  { key: 'risk', label: 'Риск' },
+];
 
 export default function App() {
   const { timeframe, setTimeframe } = useChartStore();
   const { setSignals } = useSignalStore();
+  const { openTrades } = useTradeStore();
   const [sideTab, setSideTab] = useState<SideTab>('signals');
   const [page, setPage] = useState<Page>('terminal');
+  const [showOscillator, setShowOscillator] = useState(false);
 
   useSocket();
 
@@ -69,8 +82,18 @@ export default function App() {
                 {tf}
               </button>
             ))}
-            <div className="ml-3 text-xs text-muted border-l border-border pl-3">
+            <div className="ml-3 text-xs text-muted border-l border-border pl-3 flex items-center gap-2">
               EMA<span className="text-ema font-bold">25</span>
+              <button
+                onClick={() => setShowOscillator(v => !v)}
+                className={`ml-1 px-2 py-0.5 rounded text-xs font-medium transition-colors border ${
+                  showOscillator
+                    ? 'bg-ema/20 border-ema text-ema'
+                    : 'border-border text-muted hover:text-text hover:border-text/40'
+                }`}
+              >
+                ~ Осциллятор
+              </button>
             </div>
           </>
         )}
@@ -81,28 +104,49 @@ export default function App() {
         <StatsPage />
       ) : (
         <div className="flex flex-1 overflow-hidden">
-          {/* Chart */}
-          <div className="flex-1 overflow-hidden">
-            <TradingChart />
+          {/* Chart + oscillator */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className={`overflow-hidden ${showOscillator ? 'flex-[3]' : 'flex-1'} min-h-0`}>
+              <TradingChart />
+            </div>
+            {showOscillator && (
+              <div className="flex-[1] flex flex-col border-t border-border min-h-0">
+                <div className="flex items-center gap-3 px-3 py-1 bg-panel border-b border-border shrink-0">
+                  <span className="text-xs text-muted font-medium">EMA25 Отклонение</span>
+                  <span className="text-xs text-green-400">▲ выше EMA</span>
+                  <span className="text-xs text-red-400">▼ ниже EMA</span>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <EMAOscillator />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right sidebar */}
           <div className="w-72 flex flex-col border-l border-border shrink-0 overflow-hidden">
-            <div className="flex border-b border-border shrink-0">
-              {(['signals', 'strategies', 'risk'] as SideTab[]).map(t => (
+            <div className="flex border-b border-border shrink-0 overflow-x-auto">
+              {SIDE_TABS.map(({ key, label }) => (
                 <button
-                  key={t}
-                  onClick={() => setSideTab(t)}
-                  className={`flex-1 py-2 text-xs font-medium capitalize transition-colors ${
-                    sideTab === t ? 'text-text border-b-2 border-accent' : 'text-muted hover:text-text'
+                  key={key}
+                  onClick={() => setSideTab(key)}
+                  className={`relative shrink-0 flex-1 py-2 text-xs font-medium transition-colors whitespace-nowrap px-1 ${
+                    sideTab === key ? 'text-text border-b-2 border-accent' : 'text-muted hover:text-text'
                   }`}
                 >
-                  {t === 'risk' ? 'Risk Calc' : t}
+                  {label}
+                  {key === 'open' && openTrades.length > 0 && (
+                    <span className="ml-1 bg-accent text-white text-[10px] rounded-full px-1 leading-none">
+                      {openTrades.length}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
             <div className="flex-1 overflow-hidden">
               {sideTab === 'signals' && <SignalPanel />}
+              {sideTab === 'open' && <OpenTradesPanel />}
+              {sideTab === 'closed' && <ClosedTradesPanel />}
               {sideTab === 'strategies' && <StrategyPanel />}
               {sideTab === 'risk' && <RiskCalculator />}
             </div>

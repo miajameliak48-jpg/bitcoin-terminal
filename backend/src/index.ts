@@ -12,7 +12,8 @@ import candlesRouter from './routes/candles';
 import strategiesRouter from './routes/strategies';
 import signalsRouter from './routes/signals';
 import statsRouter from './routes/stats';
-import { Timeframe, Signal, Strategy } from './types';
+import tradesRouter, { rowToTrade } from './routes/trades';
+import { Timeframe, Signal, Strategy, Trade } from './types';
 
 const app = express();
 const server = http.createServer(app);
@@ -30,6 +31,7 @@ app.use('/api/candles', candlesRouter);
 app.use('/api/strategies', strategiesRouter);
 app.use('/api/signals', signalsRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/trades', tradesRouter);
 
 app.get('/api/ticker', (_req, res) => {
   res.json(currentTicker || {});
@@ -54,6 +56,48 @@ async function getActiveStrategies(): Promise<Strategy[]> {
     enabled: r.enabled,
     params: r.params,
   }));
+}
+
+async function createTrade(signal: Signal): Promise<Trade> {
+  const { rows } = await pool.query(
+    `INSERT INTO trades
+      (signal_id, strategy_id, strategy_name, timeframe, signal_type,
+       entry_price, stop_loss, take_profit, confidence, risk_reward)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING *`,
+    [
+      signal.id ?? null, signal.strategyId, signal.strategyName, signal.timeframe,
+      signal.signalType, signal.price, signal.stopLoss, signal.takeProfit,
+      signal.confidence, signal.riskReward,
+    ]
+  );
+  return rowToTrade(rows[0]);
+}
+
+async function checkAndCloseTrades(currentPrice: number): Promise<void> {
+  const { rows } = await pool.query(`SELECT * FROM trades WHERE status = 'OPEN'`);
+  for (const r of rows) {
+    const entry = parseFloat(r.entry_price);
+    const sl = parseFloat(r.stop_loss);
+    const tp = parseFloat(r.take_profit);
+    const isBuy = r.signal_type === 'BUY';
+    const hitTP = isBuy ? currentPrice >= tp : currentPrice <= tp;
+    const hitSL = isBuy ? currentPrice <= sl : currentPrice >= sl;
+    if (!hitTP && !hitSL) continue;
+
+    const result = hitTP ? 'WIN' : 'LOSS';
+    const pnlPercent = isBuy
+      ? ((currentPrice - entry) / entry) * 100
+      : ((entry - currentPrice) / entry) * 100;
+
+    const { rows: [updated] } = await pool.query(
+      `UPDATE trades
+       SET exit_price = $1, status = 'CLOSED', result = $2, pnl_percent = $3, closed_at = NOW()
+       WHERE id = $4 RETURNING *`,
+      [currentPrice, result, pnlPercent.toFixed(4), r.id]
+    );
+    io.emit('trade:update', rowToTrade(updated));
+  }
 }
 
 async function saveSignal(signal: Signal): Promise<Signal> {
@@ -100,6 +144,8 @@ wsEvents.on('candle:closed', async ({ timeframe, candle }) => {
         const saved = await saveSignal(signal);
         io.emit('signal:new', saved);
         console.log(`[${timeframe}] ${signal.signalType} signal @ ${signal.price.toFixed(2)} (${signal.confidence}% confidence)`);
+        const trade = await createTrade(saved);
+        io.emit('trade:new', trade);
       }
     }
   } catch (err: any) {
@@ -110,15 +156,32 @@ wsEvents.on('candle:closed', async ({ timeframe, candle }) => {
 wsEvents.on('ticker', (ticker) => {
   currentTicker = ticker;
   io.emit('ticker:update', ticker);
+  checkAndCloseTrades(ticker.price).catch(err =>
+    console.error('checkAndCloseTrades error:', err.message)
+  );
 });
 
 wsEvents.on('orderbook', (ob) => {
   io.emit('orderbook:update', ob);
 });
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log('Client connected:', socket.id);
   if (currentTicker) socket.emit('ticker:update', currentTicker);
+
+  try {
+    const { rows: openRows } = await pool.query(
+      `SELECT * FROM trades WHERE status = 'OPEN' ORDER BY opened_at DESC`
+    );
+    socket.emit('trades:open', openRows.map(rowToTrade));
+
+    const { rows: closedRows } = await pool.query(
+      `SELECT * FROM trades WHERE status = 'CLOSED' ORDER BY closed_at DESC LIMIT 100`
+    );
+    socket.emit('trades:closed', closedRows.map(rowToTrade));
+  } catch (err: any) {
+    console.error('Error sending trades on connect:', err.message);
+  }
 
   socket.on('subscribe:timeframe', (timeframe: Timeframe) => {
     const candles = getCandles(timeframe, 200);

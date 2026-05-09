@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Candle, EMAPoint, Signal, Strategy, Ticker, OrderBook, Timeframe } from '../types';
+import { Candle, EMAPoint, Signal, Strategy, Ticker, OrderBook, Timeframe, Trade } from '../types';
 
 interface ChartState {
   timeframe: Timeframe;
@@ -87,5 +87,28 @@ export const useStrategyStore = create<StrategyState>((set) => ({
   updateStrategy: (id, patch) =>
     set((state) => ({
       strategies: state.strategies.map(s => s.id === id ? { ...s, ...patch } : s),
+    })),
+}));
+
+interface TradeState {
+  openTrades: Trade[];
+  closedTrades: Trade[];
+  setOpenTrades: (trades: Trade[]) => void;
+  setClosedTrades: (trades: Trade[]) => void;
+  addTrade: (trade: Trade) => void;
+  moveToClosed: (trade: Trade) => void;
+}
+
+export const useTradeStore = create<TradeState>((set) => ({
+  openTrades: [],
+  closedTrades: [],
+  setOpenTrades: (openTrades) => set({ openTrades }),
+  setClosedTrades: (closedTrades) => set({ closedTrades }),
+  addTrade: (trade) =>
+    set((state) => ({ openTrades: [trade, ...state.openTrades] })),
+  moveToClosed: (trade) =>
+    set((state) => ({
+      openTrades: state.openTrades.filter(t => t.id !== trade.id),
+      closedTrades: [trade, ...state.closedTrades].slice(0, 200),
     })),
 }));
