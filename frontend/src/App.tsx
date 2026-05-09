@@ -6,7 +6,7 @@ import SignalPanel from './components/SignalPanel';
 import OrderBook from './components/OrderBook';
 import StrategyPanel from './components/StrategyPanel';
 import RiskCalculator from './components/RiskCalculator';
-import OpenTradesPanel from './components/OpenTradesPanel';
+import OpenTradesPanel, { OpenTradeModal } from './components/OpenTradesPanel';
 import ClosedTradesPanel from './components/ClosedTradesPanel';
 import StatsPage from './pages/StatsPage';
 import { useChartStore, useTradeStore } from './store';
@@ -34,6 +34,7 @@ export default function App() {
   const [sideTab, setSideTab] = useState<SideTab>('signals');
   const [page, setPage] = useState<Page>('terminal');
   const [showOscillator, setShowOscillator] = useState(false);
+  const [tradeModal, setTradeModal] = useState<'BUY' | 'SELL' | null>(null);
 
   useSocket();
 
@@ -95,6 +96,21 @@ export default function App() {
                 ~ Осциллятор
               </button>
             </div>
+
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                onClick={() => setTradeModal('BUY')}
+                className="px-3 py-1 text-xs font-bold rounded bg-buy hover:bg-buy/80 text-white transition-colors"
+              >
+                ▲ BUY
+              </button>
+              <button
+                onClick={() => setTradeModal('SELL')}
+                className="px-3 py-1 text-xs font-bold rounded bg-sell hover:bg-sell/80 text-white transition-colors"
+              >
+                ▼ SELL
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -152,6 +168,10 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {tradeModal && (
+        <OpenTradeModal defaultSide={tradeModal} onClose={() => setTradeModal(null)} />
       )}
     </div>
   );

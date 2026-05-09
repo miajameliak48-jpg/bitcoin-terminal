@@ -107,10 +107,10 @@ function TradeCard({ trade }: { trade: Trade }) {
   );
 }
 
-function OpenTradeModal({ onClose }: { onClose: () => void }) {
+export function OpenTradeModal({ onClose, defaultSide = 'BUY' }: { onClose: () => void; defaultSide?: 'BUY' | 'SELL' }) {
   const ticker = useTickerStore(s => s.ticker);
   const { addTrade } = useTradeStore();
-  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
+  const [side, setSide] = useState<'BUY' | 'SELL'>(defaultSide);
   const [entry, setEntry] = useState(ticker ? ticker.price.toFixed(2) : '');
   const [sl, setSl] = useState('');
   const [tp, setTp] = useState('');
