@@ -40,6 +40,12 @@ export default function App() {
   const { openTrades } = useTradeStore();
   const [sideTab, setSideTab] = useState<SideTab>('signals');
   const [page, setPage] = useState<Page>('terminal');
+  const [pageDir, setPageDir] = useState<'right' | 'left'>('right');
+
+  function goPage(p: Page) {
+    setPageDir(p === 'stats' ? 'right' : 'left');
+    setPage(p);
+  }
   const [showOscillator, setShowOscillator] = useState(false);
   const [tradeModal, setTradeModal] = useState<'BUY' | 'SELL' | null>(null);
   const [customTFs, setCustomTFs] = useState<Timeframe[]>(loadCustomTFs);
@@ -94,7 +100,7 @@ export default function App() {
       <div className="flex items-center gap-1 px-3 py-1.5 bg-panel border-b border-border shrink-0 overflow-x-auto">
         {/* Page switcher */}
         <button
-          onClick={() => setPage('terminal')}
+          onClick={() => goPage('terminal')}
           className={`px-3 py-1 text-xs rounded font-medium transition-colors mr-2 ${
             page === 'terminal' ? 'bg-accent text-white' : 'text-muted hover:text-text hover:bg-border/50'
           }`}
@@ -102,7 +108,7 @@ export default function App() {
           Терминал
         </button>
         <button
-          onClick={() => setPage('stats')}
+          onClick={() => goPage('stats')}
           className={`px-3 py-1 text-xs rounded font-medium transition-colors mr-4 ${
             page === 'stats' ? 'bg-accent text-white' : 'text-muted hover:text-text hover:bg-border/50'
           }`}
@@ -213,6 +219,12 @@ export default function App() {
       </div>
 
       {/* Page content */}
+      <div
+        key={page}
+        className={`flex-1 flex flex-col overflow-hidden ${
+          pageDir === 'right' ? 'animate-slide-from-right' : 'animate-slide-from-left'
+        }`}
+      >
       {page === 'stats' ? (
         <StatsPage />
       ) : (
@@ -266,6 +278,7 @@ export default function App() {
           </div>
         </div>
       )}
+      </div>
 
       {tradeModal && (
         <OpenTradeModal defaultSide={tradeModal} onClose={() => setTradeModal(null)} />

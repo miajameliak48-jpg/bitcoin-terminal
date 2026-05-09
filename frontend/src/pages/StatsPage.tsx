@@ -11,6 +11,13 @@ const STRATEGY_LABELS: Record<StrategyType, string> = {
   EMA25_RSI: 'EMA25 + RSI',
 };
 
+const STRATEGY_GLOW: Record<string, string> = {
+  EMA25_CROSSOVER:  'shadow-glow-accent',
+  EMA25_BOUNCE:     'shadow-glow-buy',
+  EMA25_RSI:        'shadow-glow-ema',
+  EMA25_BOUNCE_1M:  'shadow-glow-buy',
+};
+
 const STRATEGY_DESC: Record<StrategyType, string> = {
   EMA25_CROSSOVER: 'Сигнал при пересечении EMA25 ценой с подтверждением объёмом',
   EMA25_BOUNCE: 'Отскок от EMA25 как динамической поддержки/сопротивления',
@@ -434,7 +441,7 @@ export default function StatsPage() {
               return (
                 <div
                   key={s.id}
-                  className="bg-panel border border-border rounded-xl p-4 hover:border-accent/50 transition-all cursor-pointer group"
+                  className={`bg-panel border border-border rounded-xl p-4 hover:border-accent/50 transition-all cursor-pointer group ${STRATEGY_GLOW[s.type] || ''}`}
                   onClick={() => setSelectedId(s.id)}
                 >
                   {/* Top */}
