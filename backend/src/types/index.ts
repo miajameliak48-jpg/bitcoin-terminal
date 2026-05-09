@@ -33,6 +33,15 @@ export interface Signal {
   createdAt?: string;
 }
 
+export interface RiskManagement {
+  id?: number;
+  name: string;
+  riskPercent: number;
+  stopLossPercent: number;
+  takeProfitPercent: number;
+  createdAt?: string;
+}
+
 export interface Strategy {
   id?: number;
   name: string;
@@ -42,6 +51,8 @@ export interface Strategy {
   leverage: number;
   enabled: boolean;
   params: StrategyParams;
+  riskManagementId?: number | null;
+  riskManagement?: RiskManagement | null;
   createdAt?: string;
 }
 

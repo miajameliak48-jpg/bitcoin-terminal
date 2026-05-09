@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Candle, EMAPoint, Signal, Strategy, Ticker, OrderBook, Timeframe, Trade } from '../types';
+import { Candle, EMAPoint, Signal, Strategy, RiskManagement, Ticker, OrderBook, Timeframe, Trade } from '../types';
 
 interface ChartState {
   timeframe: Timeframe;
@@ -133,4 +133,18 @@ export const useTradeStore = create<TradeState>((set) => ({
       openTrades: state.openTrades.filter(t => t.id !== trade.id),
       closedTrades: [trade, ...state.closedTrades].slice(0, 200),
     })),
+}));
+
+interface RiskManagementState {
+  profiles: RiskManagement[];
+  setProfiles: (profiles: RiskManagement[]) => void;
+  addProfile: (profile: RiskManagement) => void;
+  removeProfile: (id: number) => void;
+}
+
+export const useRiskManagementStore = create<RiskManagementState>((set) => ({
+  profiles: [],
+  setProfiles: (profiles) => set({ profiles }),
+  addProfile: (profile) => set((state) => ({ profiles: [...state.profiles, profile] })),
+  removeProfile: (id) => set((state) => ({ profiles: state.profiles.filter(p => p.id !== id) })),
 }));

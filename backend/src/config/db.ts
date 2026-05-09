@@ -102,6 +102,18 @@ export async function initDB(): Promise<void> {
     await client.query(`ALTER TABLE strategies ADD COLUMN IF NOT EXISTS leverage INTEGER DEFAULT 1`);
     await client.query(`ALTER TABLE trades ADD COLUMN IF NOT EXISTS leverage INTEGER DEFAULT 1`);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS risk_management (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        risk_percent DECIMAL(5,2) NOT NULL DEFAULT 1.0,
+        stop_loss_percent DECIMAL(8,4) NOT NULL,
+        take_profit_percent DECIMAL(8,4) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`ALTER TABLE strategies ADD COLUMN IF NOT EXISTS risk_management_id INTEGER REFERENCES risk_management(id) ON DELETE SET NULL`);
+
     await client.query(`CREATE INDEX IF NOT EXISTS idx_candles_tf_time ON candles(timeframe, open_time DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status, opened_at DESC)`);

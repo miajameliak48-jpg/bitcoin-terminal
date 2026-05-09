@@ -14,6 +14,7 @@ import strategiesRouter from './routes/strategies';
 import signalsRouter from './routes/signals';
 import statsRouter from './routes/stats';
 import { createTradesRouter, rowToTrade } from './routes/trades';
+import riskManagementRouter from './routes/riskManagement';
 import { Timeframe, Signal, Strategy, Trade } from './types';
 
 const app = express();
@@ -33,6 +34,7 @@ app.use('/api/strategies', strategiesRouter);
 app.use('/api/signals', signalsRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/trades', createTradesRouter(io));
+app.use('/api/risk-management', riskManagementRouter);
 
 app.get('/api/ticker', (_req, res) => {
   res.json(currentTicker || {});
@@ -67,9 +69,15 @@ app.get('/api/health', (_req, res) => {
 let currentTicker: any = null;
 
 async function getActiveStrategies(): Promise<Strategy[]> {
-  const { rows } = await pool.query(
-    'SELECT id, name, type, timeframe, risk_percent, leverage, enabled, params FROM strategies WHERE enabled = true'
-  );
+  const { rows } = await pool.query(`
+    SELECT s.id, s.name, s.type, s.timeframe, s.risk_percent, s.leverage, s.enabled, s.params,
+           s.risk_management_id,
+           rm.name AS rm_name, rm.risk_percent AS rm_risk_percent,
+           rm.stop_loss_percent AS rm_stop_loss_percent, rm.take_profit_percent AS rm_take_profit_percent
+    FROM strategies s
+    LEFT JOIN risk_management rm ON s.risk_management_id = rm.id
+    WHERE s.enabled = true
+  `);
   return rows.map(r => ({
     id: r.id,
     name: r.name,
@@ -79,6 +87,14 @@ async function getActiveStrategies(): Promise<Strategy[]> {
     leverage: r.leverage || 1,
     enabled: r.enabled,
     params: r.params,
+    riskManagementId: r.risk_management_id || null,
+    riskManagement: r.risk_management_id ? {
+      id: r.risk_management_id,
+      name: r.rm_name,
+      riskPercent: parseFloat(r.rm_risk_percent),
+      stopLossPercent: parseFloat(r.rm_stop_loss_percent),
+      takeProfitPercent: parseFloat(r.rm_take_profit_percent),
+    } : null,
   }));
 }
 
@@ -168,7 +184,7 @@ wsEvents.on('candle', ({ timeframe, candle }) => {
   });
 });
 
-wsEvents.on('candle:closed', async ({ timeframe, candle }) => {
+wsEvents.on('candle:closed', async ({ timeframe }) => {
   try {
     const strategies = await getActiveStrategies();
     const relevantStrategies = strategies.filter(s => s.timeframe === timeframe);
@@ -178,14 +194,31 @@ wsEvents.on('candle:closed', async ({ timeframe, candle }) => {
     if (candles.length < 50) return;
 
     for (const strategy of relevantStrategies) {
-      const signal = runStrategy(strategy, candles);
-      if (signal && signal.confidence >= 50) {
-        const saved = await saveSignal(signal);
-        io.emit('signal:new', saved);
-        console.log(`[${timeframe}] ${signal.signalType} @ ${signal.price.toFixed(2)} (${signal.confidence}% conf, ${strategy.riskPercent}% risk)`);
-        const trade = await createTrade(saved, strategy.riskPercent, strategy.leverage);
-        io.emit('trade:new', trade);
+      const rawSignal = runStrategy(strategy, candles);
+      if (!rawSignal || rawSignal.confidence < 50) continue;
+
+      let signal = rawSignal;
+      let effectiveRisk = strategy.riskPercent;
+
+      if (strategy.riskManagement) {
+        const rm = strategy.riskManagement;
+        const isBuy = rawSignal.signalType === 'BUY';
+        const slPrice = isBuy
+          ? rawSignal.price * (1 - rm.stopLossPercent / 100)
+          : rawSignal.price * (1 + rm.stopLossPercent / 100);
+        const tpPrice = isBuy
+          ? rawSignal.price * (1 + rm.takeProfitPercent / 100)
+          : rawSignal.price * (1 - rm.takeProfitPercent / 100);
+        const rrRatio = parseFloat((Math.abs(tpPrice - rawSignal.price) / Math.abs(rawSignal.price - slPrice)).toFixed(2));
+        signal = { ...rawSignal, stopLoss: slPrice, takeProfit: tpPrice, riskReward: rrRatio };
+        effectiveRisk = rm.riskPercent;
       }
+
+      const saved = await saveSignal(signal);
+      io.emit('signal:new', saved);
+      console.log(`[${timeframe}] ${signal.signalType} @ ${signal.price.toFixed(2)} (${signal.confidence}% conf, ${effectiveRisk}% risk${strategy.riskManagement ? ' [RM: ' + strategy.riskManagement.name + ']' : ''})`);
+      const trade = await createTrade(saved, effectiveRisk, strategy.leverage);
+      io.emit('trade:new', trade);
     }
   } catch (err: any) {
     console.error('Strategy runner error:', err.message);

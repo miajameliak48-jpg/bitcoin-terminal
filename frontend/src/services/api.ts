@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Candle, EMAPoint, Signal, Strategy, Ticker, Trade } from '../types';
+import { Candle, EMAPoint, Signal, Strategy, RiskManagement, Ticker, Trade } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -72,4 +72,18 @@ export async function fetchBalance(): Promise<number> {
 export async function syncBalance(balance: number): Promise<number> {
   const { data } = await api.put('/balance', { balance });
   return data.balance;
+}
+
+export async function fetchRiskProfiles(): Promise<RiskManagement[]> {
+  const { data } = await api.get('/risk-management');
+  return data;
+}
+
+export async function createRiskProfile(profile: Omit<RiskManagement, 'id' | 'createdAt'>): Promise<RiskManagement> {
+  const { data } = await api.post('/risk-management', profile);
+  return data;
+}
+
+export async function deleteRiskProfile(id: number): Promise<void> {
+  await api.delete(`/risk-management/${id}`);
 }
