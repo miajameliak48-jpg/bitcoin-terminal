@@ -147,7 +147,7 @@ export async function startBinanceWS(): Promise<void> {
   console.log('Loading historical candles...');
   for (const tf of TIMEFRAMES) {
     try {
-      const candles = await fetchHistoricalCandles(tf, 200);
+      const candles = await fetchHistoricalCandles(tf, 1000);
       const { updateCandle } = await import('./candleStore');
       for (const c of candles) {
         updateCandle(tf, c);

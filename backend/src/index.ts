@@ -118,7 +118,7 @@ async function saveSignal(signal: Signal): Promise<Signal> {
 }
 
 wsEvents.on('candle', ({ timeframe, candle, wasClosed }) => {
-  const closes = getCandles(timeframe as Timeframe, 200).map(c => c.close);
+  const closes = getCandles(timeframe as Timeframe, 1000).map(c => c.close);
   const ema25arr = calculateEMA(closes, 25);
   const currentEMA = ema25arr[ema25arr.length - 1];
 
@@ -135,7 +135,7 @@ wsEvents.on('candle:closed', async ({ timeframe, candle }) => {
     const relevantStrategies = strategies.filter(s => s.timeframe === timeframe);
     if (relevantStrategies.length === 0) return;
 
-    const candles = getCandles(timeframe as Timeframe, 200);
+    const candles = getCandles(timeframe as Timeframe, 1000);
     if (candles.length < 50) return;
 
     for (const strategy of relevantStrategies) {
@@ -184,7 +184,7 @@ io.on('connection', async (socket) => {
   }
 
   socket.on('subscribe:timeframe', (timeframe: Timeframe) => {
-    const candles = getCandles(timeframe, 200);
+    const candles = getCandles(timeframe, 1000);
     const closes = candles.map(c => c.close);
     const ema25 = calculateEMA(closes, 25);
     socket.emit('candles:history', {

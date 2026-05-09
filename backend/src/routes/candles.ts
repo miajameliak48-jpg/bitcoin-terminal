@@ -9,7 +9,7 @@ const router = Router();
 router.get('/', async (req: Request, res: Response) => {
   try {
     const timeframe = (req.query.timeframe as Timeframe) || '15m';
-    const limit = Math.min(parseInt(req.query.limit as string) || 200, 500);
+    const limit = Math.min(parseInt(req.query.limit as string) || 1000, 1000);
 
     const candles = getCandles(timeframe, limit);
 

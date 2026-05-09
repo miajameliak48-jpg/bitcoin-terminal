@@ -1,6 +1,6 @@
 import { Candle, Timeframe } from '../types';
 
-const BUFFER_SIZE = 500;
+const BUFFER_SIZE = 1000;
 
 const store = new Map<Timeframe, Candle[]>();
 
