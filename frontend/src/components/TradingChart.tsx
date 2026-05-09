@@ -10,6 +10,7 @@ import {
   CrosshairMode,
 } from 'lightweight-charts';
 import { useChartStore, useSignalStore } from '../store';
+import ChartExplosion from './ChartExplosion';
 
 export default function TradingChart() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -18,8 +19,16 @@ export default function TradingChart() {
   const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  const { candles, ema25, isLoading } = useChartStore();
+  const { candles, ema25, isLoading, animPhase } = useChartStore();
   const { signals } = useSignalStore();
+
+  // Drive the animation state machine
+  useEffect(() => {
+    if (animPhase === 'exiting') {
+      const t = setTimeout(() => useChartStore.getState().commitPending(), 480);
+      return () => clearTimeout(t);
+    }
+  }, [animPhase]);
 
   const initChart = useCallback(() => {
     if (!containerRef.current) return;
@@ -162,14 +171,20 @@ export default function TradingChart() {
 
   return (
     <div className="relative w-full h-full">
-      <div ref={containerRef} className="w-full h-full" />
-      {isLoading && (
+      <div
+        ref={containerRef}
+        className={`w-full h-full ${animPhase === 'exiting' ? 'chart-exiting' : ''}`}
+      />
+      {isLoading && candles.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#0d1117] z-10">
           <div className="flex flex-col items-center gap-2">
             <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             <span className="text-xs text-muted">Загрузка свечей...</span>
           </div>
         </div>
+      )}
+      {animPhase === 'exploding' && (
+        <ChartExplosion onDone={() => useChartStore.getState().finishExplosion()} />
       )}
     </div>
   );

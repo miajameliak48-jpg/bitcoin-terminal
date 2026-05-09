@@ -40,7 +40,12 @@ export function useSocket() {
     });
 
     s.on('candles:history', ({ timeframe: tf, candles, ema25 }) => {
-      if (tf === useChartStore.getState().timeframe) {
+      const store = useChartStore.getState();
+      if (tf !== store.timeframe) return;
+      // If chart already has data, animate out then swap; otherwise load directly
+      if (store.candles.length > 0) {
+        store.queueCandles(candles, ema25);
+      } else {
         setCandles(candles, ema25);
       }
     });

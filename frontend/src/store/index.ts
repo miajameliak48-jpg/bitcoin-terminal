@@ -1,23 +1,54 @@
 import { create } from 'zustand';
 import { Candle, EMAPoint, Signal, Strategy, RiskManagement, Ticker, OrderBook, Timeframe, Trade } from '../types';
 
+type ChartAnimPhase = 'idle' | 'exiting' | 'exploding';
+
 interface ChartState {
   timeframe: Timeframe;
   candles: Candle[];
   ema25: EMAPoint[];
   isLoading: boolean;
+  animPhase: ChartAnimPhase;
+  pendingCandles: Candle[] | null;
+  pendingEma: EMAPoint[] | null;
   setTimeframe: (tf: Timeframe) => void;
   setCandles: (candles: Candle[], ema25: EMAPoint[]) => void;
+  queueCandles: (candles: Candle[], ema25: EMAPoint[]) => void;
+  commitPending: () => void;
+  finishExplosion: () => void;
   updateCandle: (candle: Candle, ema25Value: number | null) => void;
 }
 
-export const useChartStore = create<ChartState>((set) => ({
+export const useChartStore = create<ChartState>((set, get) => ({
   timeframe: '15m',
   candles: [],
   ema25: [],
   isLoading: true,
-  setTimeframe: (timeframe) => set({ timeframe, candles: [], ema25: [], isLoading: true }),
+  animPhase: 'idle',
+  pendingCandles: null,
+  pendingEma: null,
+
+  // Keep old candles visible while new TF loads — no clear, no loading flash
+  setTimeframe: (timeframe) => set({ timeframe }),
+
   setCandles: (candles, ema25) => set({ candles, ema25, isLoading: false }),
+
+  queueCandles: (pendingCandles, pendingEma) =>
+    set({ pendingCandles, pendingEma, animPhase: 'exiting', isLoading: false }),
+
+  commitPending: () => {
+    const { pendingCandles, pendingEma } = get();
+    set({
+      candles: pendingCandles ?? [],
+      ema25: pendingEma ?? [],
+      pendingCandles: null,
+      pendingEma: null,
+      animPhase: 'exploding',
+    });
+  },
+
+  finishExplosion: () => set({ animPhase: 'idle' }),
+
   updateCandle: (candle, ema25Value) =>
     set((state) => {
       const candles = [...state.candles];
@@ -139,6 +170,7 @@ interface RiskManagementState {
   profiles: RiskManagement[];
   setProfiles: (profiles: RiskManagement[]) => void;
   addProfile: (profile: RiskManagement) => void;
+  updateProfile: (profile: RiskManagement) => void;
   removeProfile: (id: number) => void;
 }
 
@@ -146,5 +178,6 @@ export const useRiskManagementStore = create<RiskManagementState>((set) => ({
   profiles: [],
   setProfiles: (profiles) => set({ profiles }),
   addProfile: (profile) => set((state) => ({ profiles: [...state.profiles, profile] })),
+  updateProfile: (profile) => set((state) => ({ profiles: state.profiles.map(p => p.id === profile.id ? profile : p) })),
   removeProfile: (id) => set((state) => ({ profiles: state.profiles.filter(p => p.id !== id) })),
 }));
