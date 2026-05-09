@@ -4,7 +4,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import { initDB } from './config/db';
 import pool from './config/db';
-import { startBinanceWS, wsEvents } from './services/binanceWs';
+import { startBinanceWS, wsEvents, fetchHistoricalCandles } from './services/binanceWs';
 import { getCandles } from './services/candleStore';
 import { runStrategy } from './services/strategyRunner';
 import { getBalance, setBalance, applyPnl } from './services/balanceService';
@@ -68,7 +68,7 @@ let currentTicker: any = null;
 
 async function getActiveStrategies(): Promise<Strategy[]> {
   const { rows } = await pool.query(
-    'SELECT id, name, type, timeframe, risk_percent, enabled, params FROM strategies WHERE enabled = true'
+    'SELECT id, name, type, timeframe, risk_percent, leverage, enabled, params FROM strategies WHERE enabled = true'
   );
   return rows.map(r => ({
     id: r.id,
@@ -76,25 +76,26 @@ async function getActiveStrategies(): Promise<Strategy[]> {
     type: r.type,
     timeframe: r.timeframe,
     riskPercent: parseFloat(r.risk_percent),
+    leverage: r.leverage || 1,
     enabled: r.enabled,
     params: r.params,
   }));
 }
 
-async function createTrade(signal: Signal, riskPercent: number): Promise<Trade> {
+async function createTrade(signal: Signal, riskPercent: number, leverage: number = 1): Promise<Trade> {
   const balance = await getBalance();
   const riskAmount = parseFloat((balance * riskPercent / 100).toFixed(8));
 
   const { rows } = await pool.query(
     `INSERT INTO trades
       (signal_id, strategy_id, strategy_name, timeframe, signal_type,
-       entry_price, stop_loss, take_profit, confidence, risk_reward, risk_amount)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       entry_price, stop_loss, take_profit, confidence, risk_reward, risk_amount, leverage)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       signal.id ?? null, signal.strategyId, signal.strategyName, signal.timeframe,
       signal.signalType, signal.price, signal.stopLoss, signal.takeProfit,
-      signal.confidence, signal.riskReward, riskAmount,
+      signal.confidence, signal.riskReward, riskAmount, leverage,
     ]
   );
   return rowToTrade(rows[0]);
@@ -117,8 +118,9 @@ async function checkAndCloseTrades(currentPrice: number): Promise<void> {
       : ((entry - currentPrice) / entry) * 100;
 
     const riskAmount = r.risk_amount ? parseFloat(r.risk_amount) : 0;
+    const leverage = r.leverage || 1;
     const stopDist = Math.abs(entry - sl);
-    const positionSizeBtc = stopDist > 0 ? riskAmount / stopDist : 0;
+    const positionSizeBtc = stopDist > 0 ? (riskAmount / stopDist) * leverage : 0;
     const pnlUsd = positionSizeBtc * Math.abs(currentPrice - entry) * (hitTP ? 1 : -1);
 
     const { rows: [updated] } = await pool.query(
@@ -181,7 +183,7 @@ wsEvents.on('candle:closed', async ({ timeframe, candle }) => {
         const saved = await saveSignal(signal);
         io.emit('signal:new', saved);
         console.log(`[${timeframe}] ${signal.signalType} @ ${signal.price.toFixed(2)} (${signal.confidence}% conf, ${strategy.riskPercent}% risk)`);
-        const trade = await createTrade(saved, strategy.riskPercent);
+        const trade = await createTrade(saved, strategy.riskPercent, strategy.leverage);
         io.emit('trade:new', trade);
       }
     }
@@ -220,8 +222,15 @@ io.on('connection', async (socket) => {
     console.error('Error sending initial data on connect:', err.message);
   }
 
-  socket.on('subscribe:timeframe', (timeframe: Timeframe) => {
-    const candles = getCandles(timeframe, 1000);
+  socket.on('subscribe:timeframe', async (timeframe: Timeframe) => {
+    let candles = getCandles(timeframe, 1000);
+    if (candles.length === 0) {
+      try {
+        candles = await fetchHistoricalCandles(timeframe, 1000);
+      } catch (e: any) {
+        console.error(`Failed to fetch candles for ${timeframe}:`, e.message);
+      }
+    }
     const closes = candles.map(c => c.close);
     const ema25 = calculateEMA(closes, 25);
     socket.emit('candles:history', {
