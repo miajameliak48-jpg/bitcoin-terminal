@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import pool from '../config/db';
-import { getBalance, applyPnl } from '../services/balanceService';
+import { getBalance, setBalance, applyPnl } from '../services/balanceService';
 import { Trade } from '../types';
 
 export function rowToTrade(r: any): Trade {
@@ -114,6 +114,21 @@ export function createTradesRouter(io: SocketIOServer) {
       }
 
       res.json(rowToTrade(updated));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/trades — clear all trade history and reset balance to 10000
+  router.delete('/', async (_req, res) => {
+    try {
+      await pool.query(`DELETE FROM trades`);
+      await pool.query(`DELETE FROM signals`);
+      const newBalance = await setBalance(10000);
+      io.emit('trades:open', []);
+      io.emit('trades:closed', []);
+      io.emit('balance:update', newBalance);
+      res.json({ ok: true, balance: newBalance });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -99,10 +99,22 @@ export async function initDB(): Promise<void> {
 
     await client.query(`ALTER TABLE trades ADD COLUMN IF NOT EXISTS risk_amount DECIMAL(20,8)`);
     await client.query(`ALTER TABLE trades ADD COLUMN IF NOT EXISTS pnl_usd DECIMAL(20,8)`);
+    await client.query(`ALTER TABLE strategies ADD COLUMN IF NOT EXISTS leverage INTEGER DEFAULT 1`);
+    await client.query(`ALTER TABLE trades ADD COLUMN IF NOT EXISTS leverage INTEGER DEFAULT 1`);
 
     await client.query(`CREATE INDEX IF NOT EXISTS idx_candles_tf_time ON candles(timeframe, open_time DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status, opened_at DESC)`);
+
+    // Apply improved strategy params (runs on every restart — idempotent)
+    await client.query(`UPDATE strategies SET params = $1 WHERE type = 'EMA25_CROSSOVER'`,
+      [JSON.stringify({ rrRatio: 2, atrMultiplierSL: 1.5, volumeFilter: true, minConfidence: 55 })]);
+    await client.query(`UPDATE strategies SET params = $1 WHERE type = 'EMA25_BOUNCE' AND timeframe = '5m'`,
+      [JSON.stringify({ rrRatio: 2, atrMultiplierSL: 0.3, minConfidence: 55 })]);
+    await client.query(`UPDATE strategies SET params = $1 WHERE type = 'EMA25_RSI'`,
+      [JSON.stringify({ rrRatio: 2.5, rsiOverbought: 65, rsiOversold: 35, atrMultiplierSL: 1.0, minConfidence: 60 })]);
+    await client.query(`UPDATE strategies SET params = $1 WHERE type = 'EMA25_BOUNCE_1M'`,
+      [JSON.stringify({ rrRatio: 2, atrMultiplierSL: 0.2, minConfidence: 65 })]);
 
     // Seed default strategies
     const { rows } = await client.query('SELECT COUNT(*) FROM strategies');

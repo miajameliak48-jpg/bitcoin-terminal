@@ -224,7 +224,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     let backtestStats = null;
     let backtestError = null;
     try {
-      const candles = await fetchHistoricalCandles(strategy.timeframe as Timeframe, 300);
+      const candles = await fetchHistoricalCandles(strategy.timeframe as Timeframe, 1000);
       const trades = runBacktest(strategy, candles);
       backtestStats = { ...calcBacktestStats(trades), candlesAnalyzed: candles.length };
     } catch (e: any) {
