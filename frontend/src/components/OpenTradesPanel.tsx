@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useTradeStore, useTickerStore } from '../store';
-import { closeTrade } from '../services/api';
+import { closeTrade, openTrade } from '../services/api';
 import { Trade } from '../types';
 
 function fmt(n: number) {
@@ -106,26 +107,181 @@ function TradeCard({ trade }: { trade: Trade }) {
   );
 }
 
+function OpenTradeModal({ onClose }: { onClose: () => void }) {
+  const ticker = useTickerStore(s => s.ticker);
+  const { addTrade } = useTradeStore();
+  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
+  const [entry, setEntry] = useState(ticker ? ticker.price.toFixed(2) : '');
+  const [sl, setSl] = useState('');
+  const [tp, setTp] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit() {
+    setError('');
+    const entryNum = parseFloat(entry);
+    const slNum = parseFloat(sl);
+    const tpNum = parseFloat(tp);
+
+    if (!entryNum || !slNum || !tpNum) {
+      setError('Заполните все поля');
+      return;
+    }
+    if (side === 'BUY' && slNum >= entryNum) {
+      setError('SL должен быть ниже цены входа');
+      return;
+    }
+    if (side === 'BUY' && tpNum <= entryNum) {
+      setError('TP должен быть выше цены входа');
+      return;
+    }
+    if (side === 'SELL' && slNum <= entryNum) {
+      setError('SL должен быть выше цены входа');
+      return;
+    }
+    if (side === 'SELL' && tpNum >= entryNum) {
+      setError('TP должен быть ниже цены входа');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const trade = await openTrade({ signalType: side, entryPrice: entryNum, stopLoss: slNum, takeProfit: tpNum });
+      addTrade(trade);
+      onClose();
+    } catch {
+      setError('Ошибка открытия сделки');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="bg-panel border border-border rounded-xl p-5 w-80 shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-sm font-semibold text-text">Открыть сделку</span>
+          <button onClick={onClose} className="text-muted hover:text-text transition-colors text-lg leading-none">✕</button>
+        </div>
+
+        {/* BUY / SELL toggle */}
+        <div className="flex rounded-lg overflow-hidden border border-border mb-4">
+          <button
+            onClick={() => setSide('BUY')}
+            className={`flex-1 py-2 text-sm font-bold transition-colors ${
+              side === 'BUY' ? 'bg-buy text-white' : 'text-muted hover:text-buy'
+            }`}
+          >
+            ▲ BUY
+          </button>
+          <button
+            onClick={() => setSide('SELL')}
+            className={`flex-1 py-2 text-sm font-bold transition-colors ${
+              side === 'SELL' ? 'bg-sell text-white' : 'text-muted hover:text-sell'
+            }`}
+          >
+            ▼ SELL
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] text-muted block mb-1">Цена входа (USDT)</label>
+            <input
+              value={entry}
+              onChange={e => setEntry(e.target.value)}
+              placeholder={ticker ? ticker.price.toFixed(2) : ''}
+              className="w-full bg-bg border border-border rounded px-2.5 py-1.5 text-xs text-text focus:border-accent outline-none tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-muted block mb-1">Стоп-лосс (USDT)</label>
+            <input
+              value={sl}
+              onChange={e => setSl(e.target.value)}
+              placeholder={side === 'BUY' ? 'Ниже цены входа' : 'Выше цены входа'}
+              className="w-full bg-bg border border-border rounded px-2.5 py-1.5 text-xs text-text focus:border-accent outline-none tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-muted block mb-1">Тейк-профит (USDT)</label>
+            <input
+              value={tp}
+              onChange={e => setTp(e.target.value)}
+              placeholder={side === 'BUY' ? 'Выше цены входа' : 'Ниже цены входа'}
+              className="w-full bg-bg border border-border rounded px-2.5 py-1.5 text-xs text-text focus:border-accent outline-none tabular-nums"
+            />
+          </div>
+        </div>
+
+        {/* RR preview */}
+        {entry && sl && tp && (() => {
+          const e = parseFloat(entry), s = parseFloat(sl), t = parseFloat(tp);
+          if (!isNaN(e) && !isNaN(s) && !isNaN(t) && Math.abs(e - s) > 0) {
+            const rr = (Math.abs(t - e) / Math.abs(e - s)).toFixed(2);
+            return (
+              <div className="mt-3 text-xs text-muted flex justify-between bg-bg rounded px-2.5 py-1.5">
+                <span>Risk/Reward</span>
+                <span className="text-text font-semibold">1:{rr}</span>
+              </div>
+            );
+          }
+          return null;
+        })()}
+
+        {error && <div className="mt-2 text-xs text-sell">{error}</div>}
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className={`mt-4 w-full py-2 text-sm font-bold rounded-lg transition-colors ${
+            side === 'BUY'
+              ? 'bg-buy hover:bg-buy/80 text-white'
+              : 'bg-sell hover:bg-sell/80 text-white'
+          } disabled:opacity-50`}
+        >
+          {loading ? '...' : `Открыть ${side}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function OpenTradesPanel() {
   const { openTrades } = useTradeStore();
+  const [showModal, setShowModal] = useState(false);
 
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 border-b border-border flex items-center justify-between shrink-0">
         <span className="text-sm font-semibold text-text">Открытые сделки</span>
-        <span className="text-xs text-muted">{openTrades.length} активных</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted">{openTrades.length} активных</span>
+          <button
+            onClick={() => setShowModal(true)}
+            className="text-xs font-semibold px-2 py-0.5 rounded bg-accent hover:bg-accent/80 text-white transition-colors"
+            title="Открыть сделку вручную"
+          >
+            + Сделка
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto space-y-2 p-2">
         {openTrades.length === 0 ? (
           <div className="text-center text-muted text-xs pt-8">
             <div className="text-2xl mb-2">📊</div>
             <div>Нет открытых сделок</div>
-            <div className="mt-1 opacity-60">Сделки открываются автоматически при получении сигнала</div>
+            <div className="mt-1 opacity-60">Сделки открываются автоматически при сигнале или вручную</div>
           </div>
         ) : (
           openTrades.map((t, i) => <TradeCard key={t.id ?? i} trade={t} />)
         )}
       </div>
+
+      {showModal && <OpenTradeModal onClose={() => setShowModal(false)} />}
     </div>
   );
 }

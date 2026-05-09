@@ -90,6 +90,22 @@ export const useStrategyStore = create<StrategyState>((set) => ({
     })),
 }));
 
+interface BalanceState {
+  balance: number;
+  setBalance: (b: number) => void;
+}
+
+export const useBalanceStore = create<BalanceState>((set) => ({
+  balance: (() => {
+    const saved = localStorage.getItem('btc_balance');
+    return saved ? parseFloat(saved) || 10000 : 10000;
+  })(),
+  setBalance: (balance) => {
+    localStorage.setItem('btc_balance', balance.toString());
+    set({ balance });
+  },
+}));
+
 interface TradeState {
   openTrades: Trade[];
   closedTrades: Trade[];

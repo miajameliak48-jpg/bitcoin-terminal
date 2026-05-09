@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useTickerStore } from '../store';
+import { useTickerStore, useBalanceStore } from '../store';
 import { calculateRisk } from '../services/api';
 
 function fmt(n: number, d = 2) {
@@ -18,7 +18,8 @@ interface RiskResult {
 
 export default function RiskCalculator() {
   const { ticker } = useTickerStore();
-  const [balance, setBalance] = useState('10000');
+  const { balance: globalBalance, setBalance: setGlobalBalance } = useBalanceStore();
+  const [balance, setBalance] = useState(globalBalance.toString());
   const [risk, setRisk] = useState('1');
   const [entry, setEntry] = useState(ticker ? ticker.price.toFixed(2) : '95000');
   const [stop, setStop] = useState('');
@@ -61,7 +62,7 @@ export default function RiskCalculator() {
           <label className="text-[10px] text-muted block mb-1">Balance (USDT)</label>
           <input
             value={balance}
-            onChange={e => setBalance(e.target.value)}
+            onChange={e => { setBalance(e.target.value); const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) setGlobalBalance(v); }}
             className="w-full bg-bg border border-border rounded px-2 py-1 text-xs text-text focus:border-accent outline-none"
           />
         </div>

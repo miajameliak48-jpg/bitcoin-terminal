@@ -42,6 +42,30 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST /api/trades — manual trade
+router.post('/', async (req, res) => {
+  const { signalType, entryPrice, stopLoss, takeProfit } = req.body as {
+    signalType: string; entryPrice: number; stopLoss: number; takeProfit: number;
+  };
+  if (!['BUY', 'SELL'].includes(signalType) || !entryPrice || !stopLoss || !takeProfit) {
+    return res.status(400).json({ error: 'signalType, entryPrice, stopLoss, takeProfit required' });
+  }
+  const entry = Number(entryPrice);
+  const sl = Number(stopLoss);
+  const tp = Number(takeProfit);
+  const rr = parseFloat((Math.abs(tp - entry) / Math.abs(entry - sl)).toFixed(2));
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO trades (strategy_name, timeframe, signal_type, entry_price, stop_loss, take_profit, confidence, risk_reward)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      ['Ручная', 'manual', signalType, entry, sl, tp, 75, rr]
+    );
+    res.status(201).json(rowToTrade(rows[0]));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PUT /api/trades/:id/close
 router.put('/:id/close', async (req, res) => {
   const { exitPrice } = req.body as { exitPrice: number };

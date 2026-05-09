@@ -53,3 +53,13 @@ export async function closeTrade(id: number, exitPrice: number): Promise<Trade> 
   const { data } = await api.put(`/trades/${id}/close`, { exitPrice });
   return data;
 }
+
+export async function openTrade(params: {
+  signalType: 'BUY' | 'SELL';
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+}): Promise<Trade> {
+  const { data } = await api.post('/trades', params);
+  return data;
+}
