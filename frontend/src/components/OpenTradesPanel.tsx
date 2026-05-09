@@ -111,19 +111,34 @@ export function OpenTradeModal({ onClose, defaultSide = 'BUY' }: { onClose: () =
   const ticker = useTickerStore(s => s.ticker);
   const { addTrade } = useTradeStore();
   const [side, setSide] = useState<'BUY' | 'SELL'>(defaultSide);
+  const [slTpMode, setSlTpMode] = useState<'price' | 'percent'>('price');
   const [entry, setEntry] = useState(ticker ? ticker.price.toFixed(2) : '');
   const [sl, setSl] = useState('');
   const [tp, setTp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  function computePrices() {
+    const entryNum = parseFloat(entry);
+    const slRaw = parseFloat(sl);
+    const tpRaw = parseFloat(tp);
+    if (slTpMode === 'percent') {
+      const slPrice = side === 'BUY'
+        ? entryNum * (1 - slRaw / 100)
+        : entryNum * (1 + slRaw / 100);
+      const tpPrice = side === 'BUY'
+        ? entryNum * (1 + tpRaw / 100)
+        : entryNum * (1 - tpRaw / 100);
+      return { entryNum, slNum: slPrice, tpNum: tpPrice };
+    }
+    return { entryNum, slNum: slRaw, tpNum: tpRaw };
+  }
+
   async function handleSubmit() {
     setError('');
-    const entryNum = parseFloat(entry);
-    const slNum = parseFloat(sl);
-    const tpNum = parseFloat(tp);
+    const { entryNum, slNum, tpNum } = computePrices();
 
-    if (!entryNum || !slNum || !tpNum) {
+    if (!entryNum || !slNum || !tpNum || isNaN(slNum) || isNaN(tpNum)) {
       setError('Заполните все поля');
       return;
     }
@@ -155,6 +170,22 @@ export function OpenTradeModal({ onClose, defaultSide = 'BUY' }: { onClose: () =
       setLoading(false);
     }
   }
+
+  const entryNum = parseFloat(entry);
+  const slRaw = parseFloat(sl);
+  const tpRaw = parseFloat(tp);
+  const hasEntry = !isNaN(entryNum) && entryNum > 0;
+  const { slNum, tpNum } = computePrices();
+
+  const slHint = slTpMode === 'percent' && hasEntry && !isNaN(slRaw) && slRaw > 0
+    ? `≈ $${fmt(slNum)}`
+    : '';
+  const tpHint = slTpMode === 'percent' && hasEntry && !isNaN(tpRaw) && tpRaw > 0
+    ? `≈ $${fmt(tpNum)}`
+    : '';
+
+  const showRR = sl && tp && hasEntry && !isNaN(slNum) && !isNaN(tpNum) && Math.abs(entryNum - slNum) > 0;
+  const rr = showRR ? (Math.abs(tpNum - entryNum) / Math.abs(entryNum - slNum)).toFixed(2) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -197,40 +228,71 @@ export function OpenTradeModal({ onClose, defaultSide = 'BUY' }: { onClose: () =
               className="w-full bg-bg border border-border rounded px-2.5 py-1.5 text-xs text-text focus:border-accent outline-none tabular-nums"
             />
           </div>
+
+          {/* SL/TP mode toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted">Режим SL / TP</span>
+            <div className="flex rounded overflow-hidden border border-border text-[10px] font-semibold">
+              <button
+                onClick={() => { setSlTpMode('price'); setSl(''); setTp(''); }}
+                className={`px-2.5 py-1 transition-colors ${slTpMode === 'price' ? 'bg-accent text-white' : 'text-muted hover:text-text'}`}
+              >
+                $ Цена
+              </button>
+              <button
+                onClick={() => { setSlTpMode('percent'); setSl(''); setTp(''); }}
+                className={`px-2.5 py-1 transition-colors ${slTpMode === 'percent' ? 'bg-accent text-white' : 'text-muted hover:text-text'}`}
+              >
+                % Процент
+              </button>
+            </div>
+          </div>
+
           <div>
-            <label className="text-[10px] text-muted block mb-1">Стоп-лосс (USDT)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] text-muted">
+                Стоп-лосс {slTpMode === 'percent' ? '(%)' : '(USDT)'}
+              </label>
+              {slHint && <span className="text-[10px] text-sell tabular-nums">{slHint}</span>}
+            </div>
             <input
               value={sl}
               onChange={e => setSl(e.target.value)}
-              placeholder={side === 'BUY' ? 'Ниже цены входа' : 'Выше цены входа'}
+              placeholder={
+                slTpMode === 'percent'
+                  ? (side === 'BUY' ? 'напр. 2 (—2%)' : 'напр. 2 (+2%)')
+                  : (side === 'BUY' ? 'Ниже цены входа' : 'Выше цены входа')
+              }
               className="w-full bg-bg border border-border rounded px-2.5 py-1.5 text-xs text-text focus:border-accent outline-none tabular-nums"
             />
           </div>
+
           <div>
-            <label className="text-[10px] text-muted block mb-1">Тейк-профит (USDT)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] text-muted">
+                Тейк-профит {slTpMode === 'percent' ? '(%)' : '(USDT)'}
+              </label>
+              {tpHint && <span className="text-[10px] text-buy tabular-nums">{tpHint}</span>}
+            </div>
             <input
               value={tp}
               onChange={e => setTp(e.target.value)}
-              placeholder={side === 'BUY' ? 'Выше цены входа' : 'Ниже цены входа'}
+              placeholder={
+                slTpMode === 'percent'
+                  ? (side === 'BUY' ? 'напр. 4 (+4%)' : 'напр. 4 (—4%)')
+                  : (side === 'BUY' ? 'Выше цены входа' : 'Ниже цены входа')
+              }
               className="w-full bg-bg border border-border rounded px-2.5 py-1.5 text-xs text-text focus:border-accent outline-none tabular-nums"
             />
           </div>
         </div>
 
-        {/* RR preview */}
-        {entry && sl && tp && (() => {
-          const e = parseFloat(entry), s = parseFloat(sl), t = parseFloat(tp);
-          if (!isNaN(e) && !isNaN(s) && !isNaN(t) && Math.abs(e - s) > 0) {
-            const rr = (Math.abs(t - e) / Math.abs(e - s)).toFixed(2);
-            return (
-              <div className="mt-3 text-xs text-muted flex justify-between bg-bg rounded px-2.5 py-1.5">
-                <span>Risk/Reward</span>
-                <span className="text-text font-semibold">1:{rr}</span>
-              </div>
-            );
-          }
-          return null;
-        })()}
+        {rr && (
+          <div className="mt-3 text-xs text-muted flex justify-between bg-bg rounded px-2.5 py-1.5">
+            <span>Risk/Reward</span>
+            <span className="text-text font-semibold">1:{rr}</span>
+          </div>
+        )}
 
         {error && <div className="mt-2 text-xs text-sell">{error}</div>}
 
