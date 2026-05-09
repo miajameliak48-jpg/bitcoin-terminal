@@ -11,6 +11,7 @@ import { calculateEMA } from './indicators/ema';
 import candlesRouter from './routes/candles';
 import strategiesRouter from './routes/strategies';
 import signalsRouter from './routes/signals';
+import statsRouter from './routes/stats';
 import { Timeframe, Signal, Strategy } from './types';
 
 const app = express();
@@ -28,6 +29,7 @@ app.use(express.json());
 app.use('/api/candles', candlesRouter);
 app.use('/api/strategies', strategiesRouter);
 app.use('/api/signals', signalsRouter);
+app.use('/api/stats', statsRouter);
 
 app.get('/api/ticker', (_req, res) => {
   res.json(currentTicker || {});
