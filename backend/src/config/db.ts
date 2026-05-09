@@ -115,6 +115,14 @@ export async function initDB(): Promise<void> {
       `);
     }
 
+    // Add 1m bounce strategy if not yet seeded
+    await client.query(`
+      INSERT INTO strategies (name, type, timeframe, risk_percent, enabled, params)
+      SELECT 'EMA25 Bounce 1m', 'EMA25_BOUNCE_1M', '1m', 1.0, true,
+             '{"rrRatio":2,"atrMultiplierSL":0.3,"touchThreshold":0.0005}'
+      WHERE NOT EXISTS (SELECT 1 FROM strategies WHERE name = 'EMA25 Bounce 1m')
+    `);
+
     console.log('Database initialized');
   } finally {
     client.release();

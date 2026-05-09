@@ -1,7 +1,7 @@
 export type Timeframe = '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
 export type SignalType = 'BUY' | 'SELL' | 'HOLD';
 export type SignalStrength = 'LOW' | 'MEDIUM' | 'HIGH';
-export type StrategyType = 'EMA25_CROSSOVER' | 'EMA25_BOUNCE' | 'EMA25_RSI';
+export type StrategyType = 'EMA25_CROSSOVER' | 'EMA25_BOUNCE' | 'EMA25_RSI' | 'EMA25_BOUNCE_1M';
 
 export interface Candle {
   openTime: number;
@@ -52,6 +52,7 @@ export interface StrategyParams {
   rsiOversold?: number;
   volumeFilter?: boolean;
   minConfidence?: number;
+  touchThreshold?: number;
 }
 
 export interface Ticker {

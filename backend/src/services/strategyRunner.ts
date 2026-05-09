@@ -248,6 +248,102 @@ function runRSIStrategy(ctx: StrategyContext, strategy: Strategy): Signal | null
   };
 }
 
+function runBounce1mStrategy(ctx: StrategyContext, strategy: Strategy): Signal | null {
+  const { candles, ema25, rsi14, atr14, volumeSma20 } = ctx;
+  const n = candles.length;
+  if (n < 10) return null;
+
+  const curr = candles[n - 1];
+  const prev = candles[n - 2];
+  const currEMA = ema25[n - 1];
+  const prevEMA = ema25[n - 2];
+  const currRSI = rsi14[n - 1];
+  const currATR = atr14[n - 1];
+
+  if (!currEMA || !prevEMA || !currRSI || !currATR) return null;
+
+  const params = strategy.params;
+  const rrRatio = params.rrRatio || 2;
+  const atrMult = params.atrMultiplierSL || 0.3;
+  const touchThreshold = params.touchThreshold || 0.0005; // 0.05% — tighter than 5m
+
+  // Short lookback for 1m EMA slope
+  const emaSlope = isEMASloping(ema25, 3);
+
+  // Touch detection: current OR previous candle's wick crossed EMA
+  const wickedThruEMA = (c: Candle, ema: number) => c.low <= ema && c.high >= ema;
+  const nearEMA = (price: number, ema: number) => Math.abs(price - ema) / ema < touchThreshold;
+
+  const currBullTouch = nearEMA(curr.low, currEMA) || wickedThruEMA(curr, currEMA);
+  const prevBullTouch = nearEMA(prev.low, prevEMA) || wickedThruEMA(prev, prevEMA);
+  const currBearTouch = nearEMA(curr.high, currEMA) || wickedThruEMA(curr, currEMA);
+  const prevBearTouch = nearEMA(prev.high, prevEMA) || wickedThruEMA(prev, prevEMA);
+
+  const bullishTouch = currBullTouch || prevBullTouch;
+  const bearishTouch = currBearTouch || prevBearTouch;
+
+  // SL anchored to the actual touching candle's extreme
+  const slRefLow = prevBullTouch ? Math.min(prev.low, curr.low) : curr.low;
+  const slRefHigh = prevBearTouch ? Math.max(prev.high, curr.high) : curr.high;
+
+  let signalType: SignalType | null = null;
+  let confidence = 0;
+
+  if ((emaSlope === 'up' || emaSlope === 'flat') && bullishTouch
+    && curr.close > currEMA && curr.close > curr.open) {
+    signalType = 'BUY';
+    confidence += 30;
+    if (emaSlope === 'up') confidence += 15;
+    if (currRSI > 40 && currRSI < 65) confidence += 15;
+    if (curr.volume > volumeSma20) confidence += 15;
+    const lowerWick = Math.min(curr.open, curr.close) - curr.low;
+    const body = curr.close - curr.open;
+    if (body > 0 && lowerWick > body * 1.5) confidence += 15; // hammer
+    const prev2AboveEMA = candles.slice(-3, -1).every((c, i) => c.close > (ema25[n - 3 + i] || 0));
+    if (prev2AboveEMA) confidence += 10;
+  } else if ((emaSlope === 'down' || emaSlope === 'flat') && bearishTouch
+    && curr.close < currEMA && curr.close < curr.open) {
+    signalType = 'SELL';
+    confidence += 30;
+    if (emaSlope === 'down') confidence += 15;
+    if (currRSI > 35 && currRSI < 60) confidence += 15;
+    if (curr.volume > volumeSma20) confidence += 15;
+    const upperWick = curr.high - Math.max(curr.open, curr.close);
+    const body = curr.open - curr.close;
+    if (body > 0 && upperWick > body * 1.5) confidence += 15; // shooting star
+    const prev2BelowEMA = candles.slice(-3, -1).every((c, i) => c.close < (ema25[n - 3 + i] || 0));
+    if (prev2BelowEMA) confidence += 10;
+  }
+
+  if (!signalType || confidence < (params.minConfidence || 50)) return null;
+
+  const stopLoss = signalType === 'BUY'
+    ? slRefLow - currATR * atrMult
+    : slRefHigh + currATR * atrMult;
+  const stopDist = Math.abs(curr.close - stopLoss);
+  if (stopDist === 0) return null;
+  const takeProfit = signalType === 'BUY'
+    ? curr.close + stopDist * rrRatio
+    : curr.close - stopDist * rrRatio;
+
+  return {
+    strategyId: strategy.id!,
+    strategyName: strategy.name,
+    strategyType: strategy.type,
+    timeframe: strategy.timeframe,
+    signalType,
+    price: curr.close,
+    ema25: currEMA,
+    rsi: currRSI,
+    confidence,
+    strength: getStrength(confidence),
+    stopLoss,
+    takeProfit,
+    riskReward: rrRatio,
+    atr: currATR,
+  };
+}
+
 export function runStrategy(strategy: Strategy, candles: Candle[]): Signal | null {
   if (!strategy.id || candles.length < 50) return null;
 
@@ -257,6 +353,7 @@ export function runStrategy(strategy: Strategy, candles: Candle[]): Signal | nul
     case 'EMA25_CROSSOVER': return runCrossoverStrategy(ctx, strategy);
     case 'EMA25_BOUNCE': return runBounceStrategy(ctx, strategy);
     case 'EMA25_RSI': return runRSIStrategy(ctx, strategy);
+    case 'EMA25_BOUNCE_1M': return runBounce1mStrategy(ctx, strategy);
     default: return null;
   }
 }
